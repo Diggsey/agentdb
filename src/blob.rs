@@ -20,8 +20,8 @@ pub async fn load(
     let mut res = Vec::new();
     let mut exists = false;
     while let Some(values) = stream.try_next().await? {
-        exists = true;
         for value in values {
+            exists = true;
             res.extend_from_slice(value.value());
         }
     }

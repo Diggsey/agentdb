@@ -83,6 +83,8 @@ impl ClientState {
         }
     }
     async fn tick(&mut self) -> anyhow::Result<()> {
+        log::info!("Client tick");
+
         // Update our own timestamp
         let current_ts = Utc::now();
         self.db
@@ -149,6 +151,8 @@ impl ClientState {
             .await?;
 
         if new_partition_assignment != self.partition_assignment {
+            log::info!("Partition assignment changed");
+
             self.partition_assignment = new_partition_assignment;
             let partition_range = self.partition_assignment.range();
 
@@ -240,6 +244,7 @@ async fn get_first_in_range(
     Ok(None)
 }
 
+#[derive(Debug)]
 pub struct StateFnInput {
     pub id: Uuid,
     pub state: Option<Vec<u8>>,
@@ -387,10 +392,19 @@ impl PartitionState {
                                     ),
                                 );
                                 msg_index += 1;
-                                tx.set(&batch_key, msg.value());
+                                tx.atomic_op(
+                                    &batch_key,
+                                    msg.value(),
+                                    MutationType::SetVersionstampedKey,
+                                );
                                 tx.clear(msg.key());
                             }
                         }
+                        log::info!(
+                            "Rolled up {} message(s) in partition {}",
+                            msg_index,
+                            partition
+                        );
 
                         // Find out how long to wait for the next scheduled message.
                         // Or just wait two minutes if there's no scheduled message.
@@ -474,6 +488,12 @@ impl PartitionState {
                             );
                         }
 
+                        log::info!(
+                            "Loaded {} message(s) in partition {}",
+                            all_msgs.len(),
+                            partition
+                        );
+
                         let state_fn_input = StateFnInput {
                             id: recipient_id,
                             state: recipient_state,
@@ -546,6 +566,7 @@ pub async fn partition_task(
     state_fn: StateFn,
     cancellation: Cancellation,
 ) {
+    log::info!("Starting partition {}", partition);
     while !cancellation.is_cancelled() {
         let partition_state = PartitionState::new(
             db.clone(),
@@ -570,6 +591,7 @@ pub async fn client_task(
     let client_id = Uuid::new_v4();
     let mut client_state = ClientState::new(db, root, client_id, state_fn);
     let mut interval = tokio::time::interval(HEARTBEAT_INTERVAL);
+    log::info!("Starting client...");
 
     loop {
         select! {

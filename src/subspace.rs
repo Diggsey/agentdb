@@ -1,7 +1,4 @@
-use std::{
-    convert::{TryFrom, TryInto},
-    marker::PhantomData,
-};
+use std::{convert::TryInto, marker::PhantomData};
 
 use byteorder::{ByteOrder, LittleEndian};
 use chrono::{DateTime, TimeZone, Utc};
@@ -84,7 +81,7 @@ impl<T> Subspace<T> {
         U: Pack,
     {
         let start = self.build(root, args, false);
-        let mut end = advance(start.clone());
+        let end = advance(start.clone());
 
         (start, end)
     }
