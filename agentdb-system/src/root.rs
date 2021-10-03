@@ -14,6 +14,17 @@ impl Root {
     pub fn to_bytes(self) -> Vec<u8> {
         self.name.as_bytes().to_vec()
     }
+    pub fn from_str(name: &str) -> Option<Self> {
+        for &root in inventory::iter::<Root> {
+            if root.name == name {
+                return Some(root);
+            }
+        }
+        None
+    }
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        Self::from_str(std::str::from_utf8(bytes).ok()?)
+    }
 }
 
 impl Serialize for Root {
@@ -43,15 +54,8 @@ impl<'de> Visitor<'de> for RootVisitor {
     where
         E: serde::de::Error,
     {
-        for &root in inventory::iter::<Root> {
-            if root.name == v {
-                return Ok(root);
-            }
-        }
-        Err(serde::de::Error::invalid_value(
-            serde::de::Unexpected::Str(v),
-            &self,
-        ))
+        Root::from_str(v)
+            .ok_or_else(|| serde::de::Error::invalid_value(serde::de::Unexpected::Str(v), &self))
     }
 
     fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>

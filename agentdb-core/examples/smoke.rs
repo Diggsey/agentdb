@@ -23,7 +23,7 @@ enum Message {
     Hello(String),
 }
 
-async fn state_fn(input: StateFnInput<'_>) -> StateFnOutput {
+async fn state_fn(input: StateFnInput<'_>) -> Result<StateFnOutput, ()> {
     let mut state = if let Some(state) = input.state {
         postcard::from_bytes(&state).unwrap()
     } else {
@@ -44,11 +44,11 @@ async fn state_fn(input: StateFnInput<'_>) -> StateFnOutput {
         }
     }
 
-    StateFnOutput {
+    Ok(StateFnOutput {
         state: Some(postcard::to_stdvec(&state).unwrap()),
         messages: Vec::new(),
         commit_hook: Box::new(|_ctx| {}),
-    }
+    })
 }
 
 async fn say_hello(db: &Database, id: Uuid, from: &str) -> anyhow::Result<()> {
@@ -97,7 +97,7 @@ async fn main() -> anyhow::Result<()> {
         ROOT.to_vec(),
         Arc::new(|input| Box::pin(state_fn(input))),
     )
-    .await;
+    .await?;
 
     Ok(())
 }

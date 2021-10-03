@@ -15,6 +15,18 @@ impl Serializer for JsonSerializer {
     }
 }
 
+pub struct PostcardSerializer;
+
+impl Serializer for PostcardSerializer {
+    fn serialize<T: Serialize>(&self, value: &T) -> Result<Vec<u8>, Error> {
+        Ok(postcard::to_stdvec(value)?)
+    }
+
+    fn deserialize<T: DeserializeOwned>(&self, slice: &[u8]) -> Result<T, Error> {
+        Ok(postcard::from_bytes(slice)?)
+    }
+}
+
 pub trait Serializer {
     fn serialize<T: Serialize>(&self, value: &T) -> Result<Vec<u8>, Error>;
     fn deserialize<T: DeserializeOwned>(&self, slice: &[u8]) -> Result<T, Error>;

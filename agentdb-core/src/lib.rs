@@ -15,7 +15,7 @@ mod partition;
 mod subspace;
 mod utils;
 
-use cancellation::spawn_cancellable;
+use cancellation::{spawn_cancellable, CancellableHandle};
 use client::client_task;
 pub use error::Error;
 pub use message::send_messages;
@@ -33,6 +33,7 @@ struct MessageHeader {
 
 #[derive(Debug)]
 pub struct StateFnInput<'a> {
+    pub root: &'a [u8],
     pub tx: &'a Transaction,
     pub id: Uuid,
     pub state: Option<Vec<u8>>,
@@ -60,11 +61,19 @@ pub struct StateFnOutput {
     pub commit_hook: CommitHook,
 }
 
-pub type StateFn = Arc<dyn for<'a> Fn(StateFnInput<'a>) -> BoxFuture<'a, StateFnOutput> + Send + Sync>;
+pub type StateFn =
+    Arc<dyn for<'a> Fn(StateFnInput<'a>) -> BoxFuture<'a, Result<StateFnOutput, ()>> + Send + Sync>;
 
-pub async fn run(db: Arc<Database>, root: Vec<u8>, state_fn: StateFn) {
-    let handle = spawn_cancellable(|c| client_task(db, root, state_fn, c));
-    handle.await.unwrap().unwrap();
+pub fn start(
+    db: Arc<Database>,
+    root: Vec<u8>,
+    state_fn: StateFn,
+) -> CancellableHandle<Result<(), Error>> {
+    spawn_cancellable(|c| client_task(db, root, state_fn, c))
+}
+
+pub async fn run(db: Arc<Database>, root: Vec<u8>, state_fn: StateFn) -> Result<(), Error> {
+    start(db, root, state_fn).await?
 }
 
 #[cfg(test)]

@@ -8,6 +8,7 @@ mod macros;
 mod message;
 mod root;
 mod serializer;
+mod system;
 mod utils;
 
 pub use agent::{Agent, DynAgent};
@@ -19,6 +20,7 @@ pub use destructor::Destruct;
 pub use handler::Handle;
 pub use message::{DynMessage, Message};
 pub use root::Root;
+pub use system::{run, start};
 
 #[doc(hidden)]
 pub mod hidden {

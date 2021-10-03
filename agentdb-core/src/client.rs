@@ -6,12 +6,10 @@ use foundationdb::{Database, FdbError, RangeOption, TransactOption};
 use futures::{select, FutureExt, TryStreamExt};
 use uuid::Uuid;
 
-use crate::{
-    cancellation::{spawn_cancellable, CancellableHandle, Cancellation},
-    partition::partition_task,
-    subspace::Subspace,
-    StateFn, DEFAULT_PARTITION_COUNT, HEARTBEAT_INTERVAL,
-};
+use crate::cancellation::{spawn_cancellable, CancellableHandle, Cancellation};
+use crate::partition::partition_task;
+use crate::subspace::Subspace;
+use crate::{Error, StateFn, DEFAULT_PARTITION_COUNT, HEARTBEAT_INTERVAL};
 
 pub static CLIENT_SPACE: Subspace<(Uuid,)> = Subspace::new(b"c");
 pub static PARTITION_COUNT: Subspace<()> = Subspace::new(b"pc");
@@ -58,7 +56,7 @@ impl ClientState {
             root,
         }
     }
-    async fn tick(&mut self) -> anyhow::Result<()> {
+    async fn tick(&mut self) -> Result<(), Error> {
         log::info!("Client tick");
 
         // Update our own timestamp
@@ -158,7 +156,7 @@ pub async fn client_task(
     root: Vec<u8>,
     state_fn: StateFn,
     mut cancellation: Cancellation,
-) -> anyhow::Result<()> {
+) -> Result<(), Error> {
     let client_id = Uuid::new_v4();
     let mut client_state = ClientState::new(db, root, client_id, state_fn);
     let mut interval = tokio::time::interval(HEARTBEAT_INTERVAL);

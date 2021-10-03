@@ -3,9 +3,10 @@ use std::{future::Future, marker::PhantomData, sync::Arc, time::Duration};
 use anyhow::anyhow;
 use chrono::{DateTime, TimeZone, Utc};
 use foundationdb::{
-    options::MutationType, tuple::Versionstamp, Database, RangeOption, TransactOption,
+    options::MutationType, tuple::Versionstamp, Database, KeySelector, RangeOption, TransactOption,
 };
-use futures::{future::FusedFuture, pin_mut, select, FutureExt, TryStreamExt};
+use futures::{future::FusedFuture, select, FutureExt, TryStreamExt};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
@@ -19,6 +20,14 @@ pub static PARTITION_MESSAGE_SPACE: Subspace<(u32, DateTime<Utc>, Versionstamp, 
     PARTITION_SPACE.subspace::<(DateTime<Utc>, Versionstamp, u32)>(b"m");
 pub static PARTITION_BATCH_SPACE: Subspace<(u32, Uuid, Versionstamp)> =
     PARTITION_SPACE.subspace::<(Uuid, Versionstamp)>(b"bt");
+pub static PARTITION_AGENT_RETRY: Subspace<(u32, Uuid)> =
+    PARTITION_SPACE.subspace::<(Uuid,)>(b"retry");
+
+const MAX_POLL_INTERVAL_SECS: u64 = 120;
+
+#[derive(Debug, thiserror::Error)]
+#[error("State function returned an error")]
+struct StateFnError;
 
 struct PartitionState {
     db: Arc<Database>,
@@ -27,6 +36,18 @@ struct PartitionState {
     cancellation: Cancellation,
     partition_modified_key: Vec<u8>,
     state_fn: StateFn,
+}
+
+#[derive(Debug, Copy, Clone)]
+struct FoundRecipient {
+    id: Uuid,
+    retry_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct RetryAtState {
+    retry_at: DateTime<Utc>,
+    backoff: Duration,
 }
 
 impl PartitionState {
@@ -113,7 +134,7 @@ impl PartitionState {
 
                         // Find out how long to wait for the next scheduled message.
                         // Or just wait two minutes if there's no scheduled message.
-                        let mut delay = Duration::from_secs(120);
+                        let mut delay = Duration::from_secs(MAX_POLL_INTERVAL_SECS);
                         if let Some(msg) =
                             get_first_in_range(tx, partition_message_fut_range.clone(), true)
                                 .await?
@@ -132,28 +153,18 @@ impl PartitionState {
             )
             .await
     }
-
-    async fn process_batch(
+    async fn find_batch_to_process(
         &mut self,
         batch_range: RangeOption<'static>,
-    ) -> Result<Option<RangeOption<'static>>, Error> {
-        let max_batch_size = MAX_BATCH_SIZE;
-        let res = self
-            .db
+    ) -> Result<Option<FoundRecipient>, Error> {
+        self.db
             .transact_boxed(
-                max_batch_size,
-                |tx, max_batch_size| {
+                (),
+                |tx, ()| {
                     let root = self.root.clone();
                     let partition = self.partition;
-                    let mut batch_range = batch_range.clone();
-                    let state_fn = self.state_fn.clone();
+                    let batch_range = batch_range.clone();
 
-                    // Automatically reduce batch size on failure
-                    if *max_batch_size > 1 {
-                        *max_batch_size >>= 1;
-                    }
-
-                    // Prepare a bunch of variables for the async block
                     Box::pin(async move {
                         let (_, recipient_id, _) = if let Some(msg) =
                             get_first_in_range(tx, batch_range.clone(), false).await?
@@ -165,14 +176,86 @@ impl PartitionState {
                             return Ok(None);
                         };
 
-                        let recipient_state = blob::load(tx, &root, recipient_id, false).await?;
+                        let retry_at_key =
+                            PARTITION_AGENT_RETRY.key(&root, (partition, recipient_id));
 
+                        let retry_at_state =
+                            if let Some(retry_at_bytes) = tx.get(&retry_at_key, false).await? {
+                                let mut retry_at_state: RetryAtState =
+                                    postcard::from_bytes(&retry_at_bytes)?;
+                                if retry_at_state.retry_at > Utc::now() {
+                                    return Ok(Some(FoundRecipient {
+                                        id: recipient_id,
+                                        retry_at: Some(retry_at_state.retry_at),
+                                    }));
+                                } else {
+                                    retry_at_state.retry_at = retry_at_state.retry_at
+                                        + chrono::Duration::from_std(retry_at_state.backoff)?;
+                                    retry_at_state.backoff += retry_at_state.backoff;
+                                }
+                                retry_at_state
+                            } else {
+                                RetryAtState {
+                                    retry_at: Utc::now(),
+                                    backoff: Duration::from_secs(1),
+                                }
+                            };
+
+                        let retry_at_bytes = postcard::to_stdvec(&retry_at_state)?;
+                        tx.set(&retry_at_key, &retry_at_bytes);
+
+                        Ok::<_, Error>(Some(FoundRecipient {
+                            id: recipient_id,
+                            retry_at: None,
+                        }))
+                    })
+                },
+                TransactOption::idempotent(),
+            )
+            .await
+    }
+
+    async fn process_batch(
+        &mut self,
+        batch_range: RangeOption<'static>,
+    ) -> Result<Option<FoundRecipient>, Error> {
+        let recipient = if let Some(recipient) = self.find_batch_to_process(batch_range).await? {
+            recipient
+        } else {
+            return Ok(None);
+        };
+
+        let max_batch_size = MAX_BATCH_SIZE;
+        match self
+            .db
+            .transact_boxed(
+                max_batch_size,
+                |tx, max_batch_size| {
+                    let root = self.root.clone();
+                    let partition = self.partition;
+                    let state_fn = self.state_fn.clone();
+                    let retry_at_key = PARTITION_AGENT_RETRY.key(&root, (partition, recipient.id));
+
+                    // Automatically reduce batch size on failure
+                    if *max_batch_size > 1 {
+                        *max_batch_size >>= 1;
+                    }
+
+                    // Prepare a bunch of variables for the async block
+                    Box::pin(async move {
+                        // If this transaction commits, clear the "retry_at" flag from this agent
+                        tx.clear(&retry_at_key);
+
+                        // Load the initial agent state
+                        let recipient_state = blob::load(tx, &root, recipient.id, false).await?;
+
+                        // Determine the range of keys where messages are batched
                         let mut recipient_range: RangeOption = PARTITION_BATCH_SPACE
-                            .range::<_, (Versionstamp,)>(&root, (partition, recipient_id))
+                            .range::<_, (Versionstamp,)>(&root, (partition, recipient.id))
                             .into();
                         recipient_range.limit = Some(*max_batch_size);
-                        batch_range.begin = recipient_range.end.clone();
 
+                        // Load and clear all the message IDs
                         let mut all_blob_ids = Vec::new();
                         let mut msg_stream = tx.get_ranges(recipient_range, false);
                         while let Some(msgs) = msg_stream.try_next().await? {
@@ -184,6 +267,7 @@ impl PartitionState {
                             }
                         }
 
+                        // Load all the message contents
                         let mut all_msgs = Vec::with_capacity(all_blob_ids.len());
                         for blob_id in all_blob_ids {
                             all_msgs.push(
@@ -200,65 +284,85 @@ impl PartitionState {
                         );
 
                         let state_fn_input = StateFnInput {
+                            root: &root,
                             tx,
-                            id: recipient_id,
+                            id: recipient.id,
                             state: recipient_state,
                             messages: all_msgs,
                         };
-                        let state_fn_output = state_fn(state_fn_input).await;
+                        let state_fn_output =
+                            state_fn(state_fn_input).await.map_err(|_| StateFnError)?;
 
                         if let Some(state) = state_fn_output.state {
-                            blob::store(tx, &root, recipient_id, &state);
+                            blob::store(tx, &root, recipient.id, &state);
                         } else {
-                            blob::delete(tx, &root, recipient_id);
+                            blob::delete(tx, &root, recipient.id);
                         }
 
                         send_messages(tx, &state_fn_output.messages, 0).await?;
 
-                        Ok::<_, Error>(Some((batch_range, state_fn_output.commit_hook)))
+                        Ok::<_, Error>(state_fn_output.commit_hook)
                     })
                 },
                 TransactOption::idempotent(),
             )
-            .await?;
+            .await
+        {
+            Ok(commit_hook) => {
+                // Call the commit hook
+                commit_hook(&HookContext {
+                    db: self.db.clone(),
+                    phantom: PhantomData,
+                });
+            }
+            Err(e) if e.0.is::<StateFnError>() => {
+                // Skip
+            }
+            Err(e) => return Err(e),
+        }
 
-        Ok(if let Some((batch_range, commit_hook)) = res {
-            commit_hook(&HookContext {
-                db: self.db.clone(),
-                phantom: PhantomData,
-            });
-            Some(batch_range)
-        } else {
-            None
-        })
+        Ok(Some(recipient))
     }
-    async fn process_batches(&mut self) -> Result<bool, Error> {
-        let mut batch_range = PARTITION_BATCH_SPACE
+    async fn process_batches(&mut self) -> Result<Option<DateTime<Utc>>, Error> {
+        // Begin with the entire partition range
+        let mut batch_range: RangeOption = PARTITION_BATCH_SPACE
             .range::<_, (Uuid, Versionstamp)>(&self.root, (self.partition,))
             .into();
-        let mut was_empty = true;
-        while let Some(new_range) = self.process_batch(batch_range).await? {
-            batch_range = new_range;
-            was_empty = false;
-        }
-        Ok(was_empty)
-    }
-    async fn step(&mut self) -> anyhow::Result<()> {
-        let watch_fut = self.rollup_messages().await?;
-        pin_mut!(watch_fut);
 
-        let was_empty = self.process_batches().await?;
+        // If no messages found, retry after the maximum interval
+        let mut overall_retry_at =
+            Some(Utc::now() + chrono::Duration::seconds(MAX_POLL_INTERVAL_SECS as i64));
+
+        while let Some(recipient) = self.process_batch(batch_range.clone()).await? {
+            // If we found and processed a batch, advance our range to exclude that agent
+            batch_range.begin = KeySelector::first_greater_or_equal(
+                PARTITION_BATCH_SPACE
+                    .range::<_, (Versionstamp,)>(&self.root, (self.partition, recipient.id))
+                    .1,
+            );
+
+            // Use the smallest retry interval of all batches we process, or `None` if any batch can
+            // be retried immediately.
+            overall_retry_at = overall_retry_at.min(recipient.retry_at);
+        }
+        Ok(overall_retry_at)
+    }
+    async fn step(&mut self) -> Result<(), Error> {
+        let watch_fut = self.rollup_messages().await?;
+        let maybe_retry_at = self.process_batches().await?;
 
         // If there was nothing to process, sleep until there is a new message
-        if was_empty {
-            select! {
-                _ = watch_fut => {},
-                _ = &mut self.cancellation => {},
+        if let Some(retry_at) = maybe_retry_at {
+            if let Ok(duration) = retry_at.signed_duration_since(Utc::now()).to_std() {
+                select! {
+                    _ = tokio::time::timeout(duration, watch_fut).fuse() => {},
+                    _ = &mut self.cancellation => {},
+                }
             }
         }
         Ok(())
     }
-    pub async fn run(mut self) -> anyhow::Result<()> {
+    pub async fn run(mut self) -> Result<(), Error> {
         while !self.cancellation.is_cancelled() {
             self.step().await?;
         }

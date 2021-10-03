@@ -33,7 +33,7 @@ where
 
 #[typetag::serde]
 #[async_trait]
-pub trait Message: 'static {
+pub trait Message: Send + Sync + 'static {
     #[doc(hidden)]
     async fn _internal_deliver(
         self: Box<Self>,

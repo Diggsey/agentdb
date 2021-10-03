@@ -8,8 +8,8 @@ use crate::root::Root;
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct DynAgentRef {
-    root: Root,
-    id: Uuid,
+    pub(crate) root: Root,
+    pub(crate) id: Uuid,
 }
 
 impl DynAgentRef {

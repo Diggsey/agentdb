@@ -10,12 +10,19 @@ use crate::serializer::{DefaultSerializer, Serializer};
 pub type CommitHook = Box<dyn FnOnce(&HookContext) + Send + Sync + 'static>;
 
 pub struct Context<'a> {
-    tx: &'a Transaction,
-    messages: Vec<MessageToSend>,
-    commit_hooks: Vec<CommitHook>,
+    pub(crate) tx: &'a Transaction,
+    pub(crate) messages: Vec<MessageToSend>,
+    pub(crate) commit_hooks: Vec<CommitHook>,
 }
 
 impl<'a> Context<'a> {
+    pub(crate) fn new(tx: &'a Transaction) -> Self {
+        Self {
+            tx,
+            messages: Vec::new(),
+            commit_hooks: Vec::new(),
+        }
+    }
     pub fn dyn_send(
         &mut self,
         handle: DynAgentRef,
