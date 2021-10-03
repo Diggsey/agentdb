@@ -2,7 +2,7 @@ use foundationdb::Transaction;
 use futures::TryStreamExt;
 use uuid::Uuid;
 
-use crate::{subspace::Subspace, Error};
+use crate::{error::Error, subspace::Subspace};
 
 static BLOB_SPACE: Subspace<(Uuid, u32)> = Subspace::new(b"b");
 

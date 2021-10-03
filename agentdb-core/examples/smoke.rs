@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use agentdb::{MessageToSend, StateFnInput, StateFnOutput};
+use agentdb_core::{MessageToSend, StateFnInput, StateFnOutput};
 use chrono::Utc;
 use foundationdb::{Database, TransactOption};
 use serde::{Deserialize, Serialize};
@@ -23,7 +23,7 @@ enum Message {
     Hello(String),
 }
 
-fn state_fn(input: StateFnInput) -> StateFnOutput {
+async fn state_fn(input: StateFnInput<'_>) -> StateFnOutput {
     let mut state = if let Some(state) = input.state {
         postcard::from_bytes(&state).unwrap()
     } else {
@@ -58,7 +58,7 @@ async fn say_hello(db: &Database, id: Uuid, from: &str) -> anyhow::Result<()> {
             |tx, _| {
                 let content = postcard::to_stdvec(&Message::Hello(from.to_string())).unwrap();
                 Box::pin(async move {
-                    agentdb::send_messages(
+                    agentdb_core::send_messages(
                         tx,
                         &[MessageToSend {
                             recipient_root: ROOT.into(),
@@ -92,7 +92,12 @@ async fn main() -> anyhow::Result<()> {
     say_hello(&db, agent_id1, "Jim").await?;
     say_hello(&db, agent_id2, "Jack").await?;
 
-    agentdb::run(db, ROOT.to_vec(), Arc::new(state_fn)).await;
+    agentdb_core::run(
+        db,
+        ROOT.to_vec(),
+        Arc::new(|input| Box::pin(state_fn(input))),
+    )
+    .await;
 
     Ok(())
 }
