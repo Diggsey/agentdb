@@ -15,8 +15,11 @@ impl Root {
     pub fn name(self) -> &'static str {
         self.name
     }
+    pub fn as_bytes(self) -> &'static [u8] {
+        self.name.as_bytes()
+    }
     pub fn to_bytes(self) -> Vec<u8> {
-        self.name.as_bytes().to_vec()
+        self.as_bytes().to_vec()
     }
     pub fn from_str(name: &str) -> Option<Self> {
         for &root in inventory::iter::<Root> {

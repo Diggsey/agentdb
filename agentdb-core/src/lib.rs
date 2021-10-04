@@ -5,7 +5,7 @@ use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-mod blob;
+pub mod blob;
 pub mod cancellation;
 mod client;
 mod error;

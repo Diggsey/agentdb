@@ -10,15 +10,11 @@ declare_root!("my_root" => MY_ROOT);
 
 #[derive(Serialize, Deserialize)]
 struct MyAgent;
-
 declare_agent!("my_agent" => MyAgent);
 
 #[derive(Serialize, Deserialize)]
 struct MyMessage;
-
 declare_message!("my_message" => MyMessage);
-
-declare_constructor!(MyMessage);
 
 #[async_trait]
 impl Construct for MyMessage {
@@ -31,8 +27,7 @@ impl Construct for MyMessage {
         Ok(Some(MyAgent))
     }
 }
-
-declare_handler!(MyAgent[MyMessage]);
+declare_constructor!(MyMessage);
 
 #[async_trait]
 impl Handle<MyMessage> for MyAgent {
@@ -46,6 +41,7 @@ impl Handle<MyMessage> for MyAgent {
         Ok(false)
     }
 }
+declare_handler!(MyAgent[MyMessage]);
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
