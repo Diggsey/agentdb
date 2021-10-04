@@ -1,10 +1,11 @@
 use std::{convert::TryInto, marker::PhantomData};
 
 use byteorder::{ByteOrder, LittleEndian};
-use chrono::{DateTime, TimeZone, Utc};
 use foundationdb::tuple::Versionstamp;
 use tupleops::{ConcatTuples, TupleConcat};
 use uuid::Uuid;
+
+use crate::Timestamp;
 
 struct UntypedSubspace {
     parent: Option<&'static UntypedSubspace>,
@@ -238,12 +239,12 @@ impl Pack for Versionstamp {
     }
 }
 
-impl Pack for DateTime<Utc> {
+impl Pack for Timestamp {
     fn pack(&self, packer: &mut Packer) {
-        self.timestamp_millis().pack(packer)
+        self.millis().pack(packer)
     }
     fn unpack(buffer: &mut &[u8]) -> Option<Self> {
-        Some(Utc.timestamp_millis(i64::unpack(buffer)?))
+        Some(Self::from_millis(i64::unpack(buffer)?))
     }
 }
 

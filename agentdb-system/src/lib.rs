@@ -13,9 +13,9 @@ mod utils;
 
 pub use agent::{Agent, DynAgent};
 pub use agent_ref::{AgentRef, DynAgentRef};
-pub use agentdb_core::Error;
-pub use constructor::Construct;
-pub use context::{CommitHook, Context};
+pub use agentdb_core::{Error, Timestamp};
+pub use constructor::{Construct, DynConstruct};
+pub use context::{CommitHook, Context, ExternalContext};
 pub use destructor::Destruct;
 pub use handler::Handle;
 pub use message::{DynMessage, Message};

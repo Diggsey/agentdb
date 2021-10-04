@@ -1,4 +1,12 @@
 #[macro_export]
+macro_rules! declare_root {
+    ($name:literal => $v:ident) => {
+        pub static $v: $crate::Root = $crate::Root::new($name);
+        $crate::hidden::inventory::submit! { $v }
+    };
+}
+
+#[macro_export]
 macro_rules! declare_agent {
     ($name:literal => $t:ty) => {
         #[$crate::hidden::typetag::serde(name = $name)]

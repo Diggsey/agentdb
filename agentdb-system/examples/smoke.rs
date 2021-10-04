@@ -1,7 +1,12 @@
+use std::{sync::Arc, time::Duration};
+
 use async_trait::async_trait;
+use foundationdb::Database;
 use serde::{Deserialize, Serialize};
 
 use agentdb_system::*;
+
+declare_root!("my_root" => MY_ROOT);
 
 #[derive(Serialize, Deserialize)]
 struct MyAgent;
@@ -17,12 +22,13 @@ declare_constructor!(MyMessage);
 
 #[async_trait]
 impl Construct for MyMessage {
+    type Agent = MyAgent;
     async fn construct(
         self,
-        _ref_: DynAgentRef,
+        _ref_: AgentRef<MyAgent>,
         _context: &mut Context<'_>,
-    ) -> Result<Option<DynAgent>, Error> {
-        Ok(Some(Box::new(MyAgent)))
+    ) -> Result<Option<MyAgent>, Error> {
+        Ok(Some(MyAgent))
     }
 }
 
@@ -41,4 +47,24 @@ impl Handle<MyMessage> for MyAgent {
     }
 }
 
-fn main() {}
+#[tokio::main]
+async fn main() -> Result<(), Error> {
+    let _ = dotenv::dotenv();
+    pretty_env_logger::init();
+
+    let _network = unsafe { foundationdb::boot() };
+
+    let db = Arc::new(Database::default()?);
+
+    let mut ctx = ExternalContext::new();
+    let agent_ref = ctx.construct(MY_ROOT, MyMessage, Timestamp::zero())?;
+    ctx.send(agent_ref, MyMessage, Timestamp::zero())?;
+    ctx.send(
+        agent_ref,
+        MyMessage,
+        Timestamp::now() + Duration::from_secs(5),
+    )?;
+    ctx.run_with_db(&db).await?;
+
+    run(db, MY_ROOT).await
+}

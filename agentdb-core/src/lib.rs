@@ -1,6 +1,5 @@
 use std::{fmt::Debug, marker::PhantomData, sync::Arc, time::Duration};
 
-use chrono::{DateTime, Utc};
 use foundationdb::{Database, Transaction};
 use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
@@ -19,6 +18,7 @@ use cancellation::{spawn_cancellable, CancellableHandle};
 use client::client_task;
 pub use error::Error;
 pub use message::send_messages;
+pub use utils::Timestamp;
 
 const DEFAULT_PARTITION_COUNT: u32 = 100;
 
@@ -40,10 +40,11 @@ pub struct StateFnInput<'a> {
     pub messages: Vec<Vec<u8>>,
 }
 
+#[derive(Debug)]
 pub struct MessageToSend {
     pub recipient_root: Vec<u8>,
     pub recipient_id: Uuid,
-    pub when: DateTime<Utc>,
+    pub when: Timestamp,
     pub content: Vec<u8>,
 }
 

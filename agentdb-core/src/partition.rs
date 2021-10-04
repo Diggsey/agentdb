@@ -1,7 +1,6 @@
 use std::{future::Future, marker::PhantomData, sync::Arc, time::Duration};
 
 use anyhow::anyhow;
-use chrono::{DateTime, TimeZone, Utc};
 use foundationdb::{
     options::MutationType, tuple::Versionstamp, Database, KeySelector, RangeOption, TransactOption,
 };
@@ -10,14 +9,19 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    blob, cancellation::Cancellation, error::Error, message::send_messages, subspace::Subspace,
-    utils::get_first_in_range, HookContext, MessageHeader, StateFn, StateFnInput, MAX_BATCH_SIZE,
+    blob,
+    cancellation::Cancellation,
+    error::Error,
+    message::send_messages,
+    subspace::Subspace,
+    utils::{get_first_in_range, Timestamp},
+    HookContext, MessageHeader, StateFn, StateFnInput, MAX_BATCH_SIZE,
 };
 
 pub static PARTITION_SPACE: Subspace<(u32,)> = Subspace::new(b"p");
 pub static PARTITION_MODIFIED: Subspace<(u32,)> = PARTITION_SPACE.subspace::<()>(b"mod");
-pub static PARTITION_MESSAGE_SPACE: Subspace<(u32, DateTime<Utc>, Versionstamp, u32)> =
-    PARTITION_SPACE.subspace::<(DateTime<Utc>, Versionstamp, u32)>(b"m");
+pub static PARTITION_MESSAGE_SPACE: Subspace<(u32, Timestamp, Versionstamp, u32)> =
+    PARTITION_SPACE.subspace::<(Timestamp, Versionstamp, u32)>(b"m");
 pub static PARTITION_BATCH_SPACE: Subspace<(u32, Uuid, Versionstamp)> =
     PARTITION_SPACE.subspace::<(Uuid, Versionstamp)>(b"bt");
 pub static PARTITION_AGENT_RETRY: Subspace<(u32, Uuid)> =
@@ -41,12 +45,12 @@ struct PartitionState {
 #[derive(Debug, Copy, Clone)]
 struct FoundRecipient {
     id: Uuid,
-    retry_at: Option<DateTime<Utc>>,
+    retry_at: Option<Timestamp>,
 }
 
 #[derive(Serialize, Deserialize)]
 struct RetryAtState {
-    retry_at: DateTime<Utc>,
+    retry_at: Timestamp,
     backoff: Duration,
 }
 
@@ -78,11 +82,11 @@ impl PartitionState {
                     let root = self.root.clone();
                     let partition = self.partition;
                     let partition_modified_key = self.partition_modified_key.clone();
-                    let ts = Utc::now();
+                    let ts = Timestamp::now();
                     let mut partition_message_subrange: RangeOption = PARTITION_MESSAGE_SPACE
                         .subrange::<_, (Versionstamp, u32), _, (Versionstamp, u32)>(
                             &self.root,
-                            (self.partition, Utc.timestamp_millis(0)),
+                            (self.partition, Timestamp::zero()),
                             (self.partition, ts),
                         )
                         .into();
@@ -91,7 +95,7 @@ impl PartitionState {
                         .subrange::<_, (Versionstamp, u32), _, (Versionstamp, u32)>(
                             &self.root,
                             (self.partition, ts),
-                            (self.partition + 1, Utc.timestamp_millis(0)),
+                            (self.partition + 1, Timestamp::zero()),
                         )
                         .into();
 
@@ -140,7 +144,7 @@ impl PartitionState {
                                 .await?
                         {
                             if let Some(tuple) = PARTITION_MESSAGE_SPACE.decode(&root, msg.key()) {
-                                delay = (tuple.1 - ts).to_std().expect("Timestamp in the future");
+                                delay = tuple.1 - ts;
                             }
                         }
 
@@ -183,20 +187,19 @@ impl PartitionState {
                             if let Some(retry_at_bytes) = tx.get(&retry_at_key, false).await? {
                                 let mut retry_at_state: RetryAtState =
                                     postcard::from_bytes(&retry_at_bytes)?;
-                                if retry_at_state.retry_at > Utc::now() {
+                                if retry_at_state.retry_at > Timestamp::now() {
                                     return Ok(Some(FoundRecipient {
                                         id: recipient_id,
                                         retry_at: Some(retry_at_state.retry_at),
                                     }));
                                 } else {
-                                    retry_at_state.retry_at = retry_at_state.retry_at
-                                        + chrono::Duration::from_std(retry_at_state.backoff)?;
+                                    retry_at_state.retry_at += retry_at_state.backoff;
                                     retry_at_state.backoff += retry_at_state.backoff;
                                 }
                                 retry_at_state
                             } else {
                                 RetryAtState {
-                                    retry_at: Utc::now(),
+                                    retry_at: Timestamp::now(),
                                     backoff: Duration::from_secs(1),
                                 }
                             };
@@ -323,7 +326,7 @@ impl PartitionState {
 
         Ok(Some(recipient))
     }
-    async fn process_batches(&mut self) -> Result<Option<DateTime<Utc>>, Error> {
+    async fn process_batches(&mut self) -> Result<Option<Timestamp>, Error> {
         // Begin with the entire partition range
         let mut batch_range: RangeOption = PARTITION_BATCH_SPACE
             .range::<_, (Uuid, Versionstamp)>(&self.root, (self.partition,))
@@ -331,7 +334,7 @@ impl PartitionState {
 
         // If no messages found, retry after the maximum interval
         let mut overall_retry_at =
-            Some(Utc::now() + chrono::Duration::seconds(MAX_POLL_INTERVAL_SECS as i64));
+            Some(Timestamp::now() + Duration::from_secs(MAX_POLL_INTERVAL_SECS));
 
         while let Some(recipient) = self.process_batch(batch_range.clone()).await? {
             // If we found and processed a batch, advance our range to exclude that agent
@@ -353,11 +356,10 @@ impl PartitionState {
 
         // If there was nothing to process, sleep until there is a new message
         if let Some(retry_at) = maybe_retry_at {
-            if let Ok(duration) = retry_at.signed_duration_since(Utc::now()).to_std() {
-                select! {
-                    _ = tokio::time::timeout(duration, watch_fut).fuse() => {},
-                    _ = &mut self.cancellation => {},
-                }
+            let duration = retry_at - Timestamp::now();
+            select! {
+                _ = tokio::time::timeout(duration, watch_fut).fuse() => {},
+                _ = &mut self.cancellation => {},
             }
         }
         Ok(())

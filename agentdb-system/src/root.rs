@@ -8,6 +8,10 @@ pub struct Root {
 inventory::collect!(Root);
 
 impl Root {
+    #[doc(hidden)]
+    pub const fn new(name: &'static str) -> Self {
+        Self { name }
+    }
     pub fn name(self) -> &'static str {
         self.name
     }

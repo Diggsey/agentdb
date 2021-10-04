@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
-use agentdb_core::{MessageToSend, StateFnInput, StateFnOutput};
-use chrono::Utc;
+use agentdb_core::{MessageToSend, StateFnInput, StateFnOutput, Timestamp};
 use foundationdb::{Database, TransactOption};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -63,7 +62,7 @@ async fn say_hello(db: &Database, id: Uuid, from: &str) -> anyhow::Result<()> {
                         &[MessageToSend {
                             recipient_root: ROOT.into(),
                             recipient_id: id,
-                            when: Utc::now(),
+                            when: Timestamp::now(),
                             content,
                         }],
                         0,

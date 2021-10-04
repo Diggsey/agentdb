@@ -2,19 +2,41 @@ use agentdb_core::Error;
 use async_trait::async_trait;
 use futures::future::BoxFuture;
 
-use crate::agent::DynAgent;
-use crate::agent_ref::DynAgentRef;
+use crate::agent::{Agent, DynAgent};
+use crate::agent_ref::{AgentRef, DynAgentRef};
 use crate::context::Context;
 use crate::message::Message;
 use crate::utils::dynamic_registry;
 
 #[async_trait]
-pub trait Construct: Message {
-    async fn construct(
+pub trait DynConstruct: Message {
+    async fn dyn_construct(
         self,
         ref_: DynAgentRef,
         context: &mut Context<'_>,
     ) -> Result<Option<DynAgent>, Error>;
+}
+
+#[async_trait]
+pub trait Construct: DynConstruct {
+    type Agent: Agent;
+    async fn construct(
+        self,
+        ref_: AgentRef<Self::Agent>,
+        context: &mut Context<'_>,
+    ) -> Result<Option<Self::Agent>, Error>;
+}
+
+#[async_trait]
+impl<M: Construct> DynConstruct for M {
+    async fn dyn_construct(
+        self,
+        ref_: DynAgentRef,
+        context: &mut Context<'_>,
+    ) -> Result<Option<DynAgent>, Error> {
+        let maybe_agent = self.construct(ref_.unchecked_downcast(), context).await?;
+        Ok(maybe_agent.map(|agent| Box::new(agent) as _))
+    }
 }
 
 pub struct Constructor<C: Message>
@@ -34,10 +56,10 @@ where
 {
     pub fn new() -> Self
     where
-        C: Construct,
+        C: DynConstruct,
     {
         Self {
-            construct_fn: |message, ref_, context| C::construct(message, ref_, context),
+            construct_fn: |message, ref_, context| C::dyn_construct(message, ref_, context),
         }
     }
     pub async fn call(

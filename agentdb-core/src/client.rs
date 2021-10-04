@@ -1,7 +1,6 @@
 use std::{collections::BTreeMap, ops::Range, sync::Arc};
 
 use byteorder::{ByteOrder, LittleEndian};
-use chrono::{TimeZone, Utc};
 use foundationdb::{Database, FdbError, RangeOption, TransactOption};
 use futures::{select, FutureExt, TryStreamExt};
 use uuid::Uuid;
@@ -9,7 +8,7 @@ use uuid::Uuid;
 use crate::cancellation::{spawn_cancellable, CancellableHandle, Cancellation};
 use crate::partition::partition_task;
 use crate::subspace::Subspace;
-use crate::{Error, StateFn, DEFAULT_PARTITION_COUNT, HEARTBEAT_INTERVAL};
+use crate::{Error, StateFn, Timestamp, DEFAULT_PARTITION_COUNT, HEARTBEAT_INTERVAL};
 
 pub static CLIENT_SPACE: Subspace<(Uuid,)> = Subspace::new(b"c");
 pub static PARTITION_COUNT: Subspace<()> = Subspace::new(b"pc");
@@ -60,14 +59,14 @@ impl ClientState {
         log::info!("Client tick");
 
         // Update our own timestamp
-        let current_ts = Utc::now();
+        let current_ts = Timestamp::now();
         self.db
             .transact_boxed(
                 (),
                 |tx, ()| {
                     let client_key = self.client_key.clone();
                     Box::pin(async move {
-                        tx.set(&client_key, &current_ts.timestamp_millis().to_le_bytes());
+                        tx.set(&client_key, &current_ts.millis().to_le_bytes());
                         Ok::<_, FdbError>(())
                     })
                 },
@@ -76,7 +75,7 @@ impl ClientState {
             .await?;
 
         // Check for changed client list
-        let expired_ts = current_ts - chrono::Duration::from_std(HEARTBEAT_INTERVAL * 2)?;
+        let expired_ts = current_ts - HEARTBEAT_INTERVAL * 2;
         let new_partition_assignment = self
             .db
             .transact_boxed(
@@ -92,7 +91,7 @@ impl ClientState {
                         let mut client_index = 0;
                         while let Some(kvs) = kv_stream.try_next().await? {
                             for kv in kvs {
-                                let ts = Utc.timestamp_millis(LittleEndian::read_i64(kv.value()));
+                                let ts = Timestamp::from_millis(LittleEndian::read_i64(kv.value()));
                                 if ts < expired_ts {
                                     tx.clear(kv.key());
                                 } else {
