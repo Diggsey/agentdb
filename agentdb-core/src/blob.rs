@@ -95,7 +95,7 @@ pub fn watch_stream(
                 fut.await?;
             }
             Ok::<_, Error>(Some(
-                db.transact_boxed_local(
+                db.transact_boxed(
                     root,
                     move |tx, root| {
                         async move {
@@ -103,7 +103,7 @@ pub fn watch_stream(
                             let fut = watch(tx, &root, blob_id);
                             Ok::<_, Error>((blob, Some(fut)))
                         }
-                        .boxed_local()
+                        .boxed()
                     },
                     TransactOption::idempotent(),
                 )

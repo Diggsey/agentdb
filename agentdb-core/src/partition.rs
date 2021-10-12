@@ -1,4 +1,4 @@
-use std::{future::Future, marker::PhantomData, sync::Arc, time::Duration};
+use std::{future::Future, sync::Arc, time::Duration};
 
 use anyhow::anyhow;
 use foundationdb::{
@@ -278,6 +278,7 @@ impl PartitionState {
                                     .await?
                                     .ok_or_else(|| Error(anyhow!("Blob not found: {}", blob_id)))?,
                             );
+                            blob::delete(tx, &root, blob_id);
                         }
 
                         log::info!(
@@ -313,9 +314,8 @@ impl PartitionState {
         {
             Ok(commit_hook) => {
                 // Call the commit hook
-                commit_hook(&HookContext {
+                commit_hook(HookContext {
                     db: self.db.clone(),
-                    phantom: PhantomData,
                 });
             }
             Err(e) if e.0.is::<StateFnError>() => {

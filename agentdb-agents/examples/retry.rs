@@ -1,11 +1,28 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use foundationdb::Database;
 use serde::{Deserialize, Serialize};
 
+use agentdb_agents::effects::callback::{EffectCallback, EffectContext};
+use agentdb_agents::effects::retry::DoRetry;
 use agentdb_system::*;
+use tokio::io::AsyncReadExt;
 
 declare_root!("my_root" => MY_ROOT);
+
+#[derive(Serialize, Deserialize)]
+struct MyEffect;
+
+#[typetag::serde(name = "my_effect")]
+impl EffectCallback for MyEffect {
+    fn call(&self, context: EffectContext) {
+        tokio::spawn(async move {
+            println!("Press enter to ack!");
+            tokio::io::stdin().read(&mut [0]).await.unwrap();
+            context.send_response(MyMessage).await.unwrap();
+        });
+    }
+}
 
 #[agent(name = "my_agent")]
 #[derive(Serialize, Deserialize)]
@@ -15,14 +32,19 @@ struct MyAgent;
 #[derive(Serialize, Deserialize)]
 struct MyMessage;
 
+#[message(name = "my_constructor")]
+#[derive(Serialize, Deserialize)]
+struct MyConstructor;
+
 #[constructor]
-impl Construct for MyMessage {
+impl Construct for MyConstructor {
     type Agent = MyAgent;
     async fn construct(
         self,
-        _ref_: AgentRef<MyAgent>,
-        _context: &mut Context<'_>,
+        ref_: AgentRef<MyAgent>,
+        context: &mut Context<'_>,
     ) -> Result<Option<MyAgent>, Error> {
+        context.construct(MY_ROOT, DoRetry::new(ref_, MyEffect), Timestamp::zero())?;
         Ok(Some(MyAgent))
     }
 }
@@ -50,13 +72,7 @@ async fn main() -> Result<(), Error> {
     let db = Arc::new(Database::default()?);
 
     let mut ctx = ExternalContext::new();
-    let agent_ref = ctx.construct(MY_ROOT, MyMessage, Timestamp::zero())?;
-    ctx.send(agent_ref, MyMessage, Timestamp::zero())?;
-    ctx.send(
-        agent_ref,
-        MyMessage,
-        Timestamp::now() + Duration::from_secs(5),
-    )?;
+    ctx.construct(MY_ROOT, MyConstructor, Timestamp::zero())?;
     ctx.run_with_db(&db).await?;
 
     run(db, MY_ROOT).await

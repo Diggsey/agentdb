@@ -10,7 +10,7 @@ use crate::message::{DynMessage, Message};
 use crate::root::Root;
 use crate::serializer::{DefaultSerializer, Serializer};
 
-pub type CommitHook = Box<dyn FnOnce(&HookContext) + Send + Sync + 'static>;
+pub type CommitHook = Box<dyn FnOnce(HookContext) + Send + Sync + 'static>;
 
 pub struct Context<'a> {
     pub(crate) tx: &'a Transaction,
@@ -58,6 +58,24 @@ impl<'a> Context<'a> {
         });
         Ok(handle)
     }
+    pub fn dyn_construct_with(
+        &mut self,
+        root: Root,
+        message_fn: impl FnOnce(DynAgentRef) -> DynMessage,
+        when: Timestamp,
+    ) -> Result<DynAgentRef, Error> {
+        let handle = DynAgentRef {
+            root,
+            id: Uuid::new_v4(),
+        };
+        self.messages.push(MessageToSend {
+            recipient_root: handle.root().to_bytes(),
+            recipient_id: handle.id(),
+            when,
+            content: DefaultSerializer.serialize(&message_fn(handle))?,
+        });
+        Ok(handle)
+    }
     pub fn dyn_run_on_commit(&mut self, f: CommitHook) {
         self.commit_hooks.push(f);
     }
@@ -85,7 +103,24 @@ impl<'a> Context<'a> {
             .dyn_construct(root, Box::new(message), when)?
             .unchecked_downcast())
     }
-    pub fn run_on_commit(&mut self, f: impl FnOnce(&HookContext) + Send + Sync + 'static) {
+    pub fn construct_with<M: Construct>(
+        &mut self,
+        root: Root,
+        message_fn: impl FnOnce(AgentRef<M::Agent>) -> M,
+        when: Timestamp,
+    ) -> Result<AgentRef<M::Agent>, Error>
+    where
+        Constructor<M>: inventory::Collect,
+    {
+        Ok(self
+            .dyn_construct_with(
+                root,
+                |ref_| Box::new(message_fn(ref_.unchecked_downcast())),
+                when,
+            )?
+            .unchecked_downcast())
+    }
+    pub fn run_on_commit(&mut self, f: impl FnOnce(HookContext) + Send + Sync + 'static) {
         self.dyn_run_on_commit(Box::new(f))
     }
     pub fn tx(&self) -> &'a Transaction {
@@ -134,6 +169,24 @@ impl ExternalContext {
         });
         Ok(handle)
     }
+    pub fn dyn_construct_with(
+        &mut self,
+        root: Root,
+        message_fn: impl FnOnce(DynAgentRef) -> DynMessage,
+        when: Timestamp,
+    ) -> Result<DynAgentRef, Error> {
+        let handle = DynAgentRef {
+            root,
+            id: Uuid::new_v4(),
+        };
+        self.messages.push(MessageToSend {
+            recipient_root: handle.root().to_bytes(),
+            recipient_id: handle.id(),
+            when,
+            content: DefaultSerializer.serialize(&message_fn(handle))?,
+        });
+        Ok(handle)
+    }
 
     pub fn send<M: Message, A: Handle<M>>(
         &mut self,
@@ -159,6 +212,23 @@ impl ExternalContext {
             .dyn_construct(root, Box::new(message), when)?
             .unchecked_downcast())
     }
+    pub fn construct_with<M: Construct>(
+        &mut self,
+        root: Root,
+        message_fn: impl FnOnce(AgentRef<M::Agent>) -> M,
+        when: Timestamp,
+    ) -> Result<AgentRef<M::Agent>, Error>
+    where
+        Constructor<M>: inventory::Collect,
+    {
+        Ok(self
+            .dyn_construct_with(
+                root,
+                |ref_| Box::new(message_fn(ref_.unchecked_downcast())),
+                when,
+            )?
+            .unchecked_downcast())
+    }
 
     async fn run_internal(&self, tx: &Transaction, user_version: u16) -> Result<(), Error> {
         send_messages(tx, &self.messages, user_version).await
@@ -167,9 +237,9 @@ impl ExternalContext {
         self.run_internal(tx, user_version).await
     }
     pub async fn run_with_db(self, db: &Database) -> Result<(), Error> {
-        db.transact_boxed_local(
+        db.transact_boxed(
             self,
-            |tx, this| this.run_internal(tx, 0).boxed_local(),
+            |tx, this| this.run_internal(tx, 0).boxed(),
             TransactOption::default(),
         )
         .await

@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 agentdb-core = { path = "../agentdb-core" }
+agentdb-macros = { path = "../agentdb-macros" }
 uuid = "0.8.2"
 serde = "1.0.130"
 typetag = "0.1.7"

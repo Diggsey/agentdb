@@ -1,11 +1,14 @@
-use std::collections::{hash_map, HashMap};
+use std::collections::{hash_map, HashMap, HashSet};
 
 use byteorder::{ByteOrder, LittleEndian};
 use foundationdb::{options::MutationType, tuple::Versionstamp, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    blob, client::PARTITION_COUNT_SEND, error::Error, partition::PARTITION_MESSAGE_SPACE,
+    blob,
+    client::PARTITION_COUNT_SEND,
+    error::Error,
+    partition::{PARTITION_MESSAGE_SPACE, PARTITION_MODIFIED},
     MessageHeader, MessageToSend, DEFAULT_PARTITION_COUNT,
 };
 
@@ -22,6 +25,7 @@ pub async fn send_messages(
     user_version: u16,
 ) -> Result<(), Error> {
     let mut partition_counts = HashMap::new();
+    let mut partition_modified = HashSet::new();
 
     for (idx, msg) in msgs.into_iter().enumerate() {
         let entry = partition_counts.entry(&msg.recipient_root);
@@ -55,6 +59,16 @@ pub async fn send_messages(
             ),
         );
         tx.atomic_op(&key, &msg_hdr, MutationType::SetVersionstampedKey);
+
+        // Mark the partition as modified
+        if partition_modified.insert((&msg.recipient_root, partition)) {
+            let modified_key = PARTITION_MODIFIED.key(&msg.recipient_root, (partition,));
+            tx.atomic_op(
+                &modified_key,
+                &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                MutationType::SetVersionstampedValue,
+            );
+        }
     }
 
     Ok(())

@@ -1,4 +1,4 @@
-use std::{fmt::Debug, marker::PhantomData, sync::Arc, time::Duration};
+use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use foundationdb::{Database, Transaction};
 use futures::future::BoxFuture;
@@ -49,12 +49,17 @@ pub struct MessageToSend {
 }
 
 #[derive(Clone)]
-pub struct HookContext<'a> {
+pub struct HookContext {
     db: Arc<Database>,
-    phantom: PhantomData<&'a ()>,
 }
 
-pub type CommitHook = Box<dyn FnOnce(&HookContext) + Send + Sync + 'static>;
+impl HookContext {
+    pub fn db(&self) -> Arc<Database> {
+        self.db.clone()
+    }
+}
+
+pub type CommitHook = Box<dyn FnOnce(HookContext) + Send + Sync + 'static>;
 
 pub struct StateFnOutput {
     pub state: Option<Vec<u8>>,

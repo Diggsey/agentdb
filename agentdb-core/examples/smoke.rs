@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use agentdb_core::{MessageToSend, StateFnInput, StateFnOutput, Timestamp};
 use foundationdb::{Database, TransactOption};
+use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -52,11 +53,11 @@ async fn state_fn(input: StateFnInput<'_>) -> Result<StateFnOutput, ()> {
 
 async fn say_hello(db: &Database, id: Uuid, from: &str) -> anyhow::Result<()> {
     Ok(db
-        .transact_boxed_local(
+        .transact_boxed(
             (),
             |tx, _| {
                 let content = postcard::to_stdvec(&Message::Hello(from.to_string())).unwrap();
-                Box::pin(async move {
+                async move {
                     agentdb_core::send_messages(
                         tx,
                         &[MessageToSend {
@@ -68,7 +69,8 @@ async fn say_hello(db: &Database, id: Uuid, from: &str) -> anyhow::Result<()> {
                         0,
                     )
                     .await
-                })
+                }
+                .boxed()
             },
             TransactOption::default(),
         )

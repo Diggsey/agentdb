@@ -14,10 +14,18 @@ macro_rules! declare_agent {
         impl $crate::Agent for $t {
             async fn _internal_destruct(
                 self: Box<Self>,
-                ref_: DynAgentRef,
-                context: &mut Context,
+                ref_: $crate::DynAgentRef,
+                context: &mut $crate::Context,
             ) -> Result<(), $crate::Error> {
                 $crate::hidden::destruct_agent(*self, ref_, context).await
+            }
+            async fn _internal_handle_dyn(
+                &mut self,
+                ref_: $crate::DynAgentRef,
+                message: $crate::DynMessage,
+                context: &mut $crate::Context,
+            ) -> Result<bool, $crate::Error> {
+                $crate::hidden::handle_dyn(self, ref_, message, context).await
             }
         }
     };
@@ -67,5 +75,14 @@ macro_rules! declare_handler {
                 $crate::hidden::Handler::<$b>::new::<$a>()
             }
         )*
+    };
+}
+
+#[macro_export]
+macro_rules! declare_dyn_handler {
+    ($a:ty) => {
+        $crate::hidden::inventory::submit! {
+            $crate::hidden::HandlerDyn::<$a>::new()
+        }
     };
 }

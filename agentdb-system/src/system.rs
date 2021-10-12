@@ -41,7 +41,7 @@ async fn system_fn_fallible(input: StateFnInput<'_>) -> Result<StateFnOutput, Er
         messages: context.messages,
         commit_hook: Box::new(|hook_ctx| {
             for commit_hook in commit_hooks {
-                commit_hook(hook_ctx);
+                commit_hook(hook_ctx.clone());
             }
         }),
     })

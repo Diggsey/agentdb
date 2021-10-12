@@ -41,9 +41,9 @@ impl DynAgentRef {
         })
     }
     pub async fn load_with_db(self, db: &Database) -> Result<Option<DynAgent>, Error> {
-        db.transact_boxed_local(
+        db.transact_boxed(
             (),
-            |tx, ()| self.load(tx, true).boxed_local(),
+            |tx, ()| self.load(tx, true).boxed(),
             TransactOption::idempotent(),
         )
         .await

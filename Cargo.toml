@@ -1,2 +1,2 @@
 [workspace]
-members = ["agentdb-core", "agentdb-system"]
+members = ["agentdb-core", "agentdb-macros", "agentdb-system", "agentdb-agents"]

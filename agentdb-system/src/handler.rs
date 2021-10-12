@@ -1,7 +1,6 @@
 use std::any::TypeId;
 
 use agentdb_core::Error;
-use anyhow::anyhow;
 use async_trait::async_trait;
 use futures::future::BoxFuture;
 
@@ -63,7 +62,9 @@ where
                 return (handler.handle_fn)(state, ref_, message, context).await;
             }
         }
-        Err(Error(anyhow!("No handler for this message/agent pairing")))
+        state
+            ._internal_handle_dyn(ref_, Box::new(message), context)
+            .await
     }
 }
 
