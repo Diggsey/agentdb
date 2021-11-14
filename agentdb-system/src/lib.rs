@@ -16,7 +16,7 @@ pub use agentdb_macros::*;
 
 pub use agent::{Agent, DynAgent};
 pub use agent_ref::{AgentRef, DynAgentRef};
-pub use agentdb_core::{Error, HookContext, Timestamp};
+pub use agentdb_core::{default_client_name, Error, HookContext, Timestamp};
 pub use constructor::{Construct, DynConstruct};
 pub use context::{CommitHook, Context, ExternalContext};
 pub use destructor::Destruct;

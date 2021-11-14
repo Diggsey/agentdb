@@ -1,22 +1,22 @@
 use std::collections::{hash_map, HashMap, HashSet};
 
-use byteorder::{ByteOrder, LittleEndian};
 use foundationdb::{options::MutationType, tuple::Versionstamp, Transaction};
 use uuid::Uuid;
 
 use crate::{
     blob,
-    client::PARTITION_COUNT_SEND,
+    client::{PartitionRange, PARTITION_COUNT_SEND},
     error::Error,
     partition::{PARTITION_MESSAGE_SPACE, PARTITION_MODIFIED},
-    MessageHeader, MessageToSend, DEFAULT_PARTITION_COUNT,
+    utils::load_partition_range,
+    MessageHeader, MessageToSend,
 };
 
-fn partition_for_recipient(recipient_id: Uuid, partition_count: u32) -> u32 {
+fn partition_for_recipient(recipient_id: Uuid, partition_range: PartitionRange) -> u32 {
     let hash = recipient_id.as_u128();
     let hash = ((hash >> 64) ^ hash) as u64;
     let hash = ((hash >> 32) ^ hash) as u32;
-    hash % partition_count
+    (hash % partition_range.count) + partition_range.offset
 }
 
 pub async fn send_messages(
@@ -29,14 +29,10 @@ pub async fn send_messages(
 
     for (idx, msg) in msgs.into_iter().enumerate() {
         let entry = partition_counts.entry(&msg.recipient_root);
-        let partition_count = match entry {
+        let partition_range = match entry {
             hash_map::Entry::Occupied(occ) => *occ.get(),
             hash_map::Entry::Vacant(vac) => *vac.insert(
-                tx.get(&PARTITION_COUNT_SEND.key(&msg.recipient_root, ()), true)
-                    .await?
-                    .as_deref()
-                    .map(LittleEndian::read_u32)
-                    .unwrap_or(DEFAULT_PARTITION_COUNT),
+                load_partition_range(tx, &msg.recipient_root, &PARTITION_COUNT_SEND).await?,
             ),
         };
 
@@ -47,7 +43,7 @@ pub async fn send_messages(
             blob_id: msg_id,
         })?;
 
-        let partition = partition_for_recipient(msg.recipient_id, partition_count);
+        let partition = partition_for_recipient(msg.recipient_id, partition_range);
 
         let key = PARTITION_MESSAGE_SPACE.key(
             &msg.recipient_root,

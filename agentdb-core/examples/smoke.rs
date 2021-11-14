@@ -94,6 +94,7 @@ async fn main() -> anyhow::Result<()> {
     say_hello(&db, agent_id2, "Jack").await?;
 
     agentdb_core::run(
+        agentdb_core::default_client_name(),
         db,
         ROOT.to_vec(),
         Arc::new(|input| Box::pin(state_fn(input))),

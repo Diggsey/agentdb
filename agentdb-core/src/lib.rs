@@ -5,6 +5,7 @@ use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+pub mod admin;
 pub mod blob;
 pub mod cancellation;
 mod client;
@@ -15,12 +16,15 @@ mod subspace;
 mod utils;
 
 use cancellation::{spawn_cancellable, CancellableHandle};
-use client::client_task;
+use client::{client_task, PartitionRange};
 pub use error::Error;
 pub use message::send_messages;
 pub use utils::Timestamp;
 
-const DEFAULT_PARTITION_COUNT: u32 = 100;
+const DEFAULT_PARTITION_RANGE: PartitionRange = PartitionRange {
+    offset: 0,
+    count: 100,
+};
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 const MAX_BATCH_SIZE: usize = 100;
@@ -71,15 +75,27 @@ pub type StateFn =
     Arc<dyn for<'a> Fn(StateFnInput<'a>) -> BoxFuture<'a, Result<StateFnOutput, ()>> + Send + Sync>;
 
 pub fn start(
+    client_name: String,
     db: Arc<Database>,
     root: Vec<u8>,
     state_fn: StateFn,
 ) -> CancellableHandle<Result<(), Error>> {
-    spawn_cancellable(|c| client_task(db, root, state_fn, c))
+    spawn_cancellable(|c| client_task(client_name, db, root, state_fn, c))
 }
 
-pub async fn run(db: Arc<Database>, root: Vec<u8>, state_fn: StateFn) -> Result<(), Error> {
-    start(db, root, state_fn).await?
+pub async fn run(
+    client_name: String,
+    db: Arc<Database>,
+    root: Vec<u8>,
+    state_fn: StateFn,
+) -> Result<(), Error> {
+    start(client_name, db, root, state_fn).await?
+}
+
+pub fn default_client_name() -> String {
+    let hn = hostname::get().unwrap_or_else(|_| "unknown".into());
+    let pid = std::process::id();
+    format!("{}:{}", hn.to_string_lossy(), pid)
 }
 
 #[cfg(test)]

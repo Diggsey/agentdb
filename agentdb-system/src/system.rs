@@ -53,14 +53,19 @@ async fn system_fn(input: StateFnInput<'_>) -> Result<StateFnOutput, ()> {
     })
 }
 
-pub fn start(db: Arc<Database>, root: Root) -> CancellableHandle<Result<(), Error>> {
+pub fn start(
+    client_name: String,
+    db: Arc<Database>,
+    root: Root,
+) -> CancellableHandle<Result<(), Error>> {
     agentdb_core::start(
+        client_name,
         db,
         root.to_bytes(),
         Arc::new(|input| Box::pin(async move { system_fn(input).await })),
     )
 }
 
-pub async fn run(db: Arc<Database>, root: Root) -> Result<(), Error> {
-    start(db, root).await?
+pub async fn run(client_name: String, db: Arc<Database>, root: Root) -> Result<(), Error> {
+    start(client_name, db, root).await?
 }

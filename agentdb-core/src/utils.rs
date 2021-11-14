@@ -9,6 +9,8 @@ use foundationdb::{future::FdbValue, FdbError, RangeOption, Transaction};
 use futures::TryStreamExt;
 use serde::{Deserialize, Serialize};
 
+use crate::{client::PartitionRange, subspace::Subspace, DEFAULT_PARTITION_RANGE};
+
 pub async fn get_first_in_range(
     tx: &Transaction,
     mut range: RangeOption<'_>,
@@ -22,6 +24,20 @@ pub async fn get_first_in_range(
         }
     }
     Ok(None)
+}
+
+pub async fn load_partition_range(
+    tx: &Transaction,
+    root: &[u8],
+    space: &Subspace<()>,
+) -> Result<PartitionRange, FdbError> {
+    let key = space.key(root, ());
+    Ok(tx
+        .get(&key, true)
+        .await?
+        .as_deref()
+        .and_then(|slice| postcard::from_bytes(slice).ok())
+        .unwrap_or(DEFAULT_PARTITION_RANGE))
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]

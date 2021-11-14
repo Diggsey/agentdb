@@ -59,5 +59,5 @@ async fn main() -> Result<(), Error> {
     )?;
     ctx.run_with_db(&db).await?;
 
-    run(db, MY_ROOT).await
+    run(default_client_name(), db, MY_ROOT).await
 }

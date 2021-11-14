@@ -185,18 +185,18 @@ impl UntypedSubspace {
     fn pack(&self, packer: &mut Packer) {
         if let Some(parent) = self.parent {
             parent.pack(packer);
-            packer.buffer.push(b'.');
         }
+        packer.buffer.push(b'.');
         packer.buffer.extend_from_slice(self.prefix);
     }
     fn unpack(&self, buffer: &mut &[u8]) -> bool {
         if let Some(parent) = self.parent {
             parent.unpack(buffer);
-            if buffer.is_empty() || buffer[0] != b'.' {
-                return false;
-            }
-            *buffer = &buffer[1..];
         }
+        if buffer.is_empty() || buffer[0] != b'.' {
+            return false;
+        }
+        *buffer = &buffer[1..];
         if !buffer.starts_with(self.prefix) {
             return false;
         }

@@ -20,6 +20,7 @@ use crate::{
 
 pub static PARTITION_SPACE: Subspace<(u32,)> = Subspace::new(b"p");
 pub static PARTITION_MODIFIED: Subspace<(u32,)> = PARTITION_SPACE.subspace::<()>(b"mod");
+pub static PARTITION_AGENT_COUNT: Subspace<(u32,)> = PARTITION_SPACE.subspace::<()>(b"agent_count");
 pub static PARTITION_MESSAGE_SPACE: Subspace<(u32, Timestamp, Versionstamp, u32)> =
     PARTITION_SPACE.subspace::<(Timestamp, Versionstamp, u32)>(b"m");
 pub static PARTITION_BATCH_SPACE: Subspace<(u32, Uuid, Versionstamp)> =
@@ -238,6 +239,8 @@ impl PartitionState {
                     let partition = self.partition;
                     let state_fn = self.state_fn.clone();
                     let retry_at_key = PARTITION_AGENT_RETRY.key(&root, (partition, recipient.id));
+                    let agent_count_key = PARTITION_AGENT_COUNT.key(&root, (partition,));
+                    let mut agent_count_delta = 0i64;
 
                     // Automatically reduce batch size on failure
                     if *max_batch_size > 1 {
@@ -294,16 +297,31 @@ impl PartitionState {
                             state: recipient_state,
                             messages: all_msgs,
                         };
+                        if state_fn_input.state.is_none() {
+                            // No previous state, we might be creating an agent
+                            agent_count_delta += 1;
+                        }
                         let state_fn_output =
                             state_fn(state_fn_input).await.map_err(|_| StateFnError)?;
 
                         if let Some(state) = state_fn_output.state {
                             blob::store(tx, &root, recipient.id, &state);
                         } else {
+                            // No new state, we might be deleting an agent
+                            agent_count_delta -= 1;
                             blob::delete(tx, &root, recipient.id);
                         }
 
                         send_messages(tx, &state_fn_output.messages, 0).await?;
+
+                        // Update partition agent count
+                        if agent_count_delta != 0 {
+                            tx.atomic_op(
+                                &agent_count_key,
+                                &agent_count_delta.to_le_bytes(),
+                                MutationType::Add,
+                            );
+                        }
 
                         Ok::<_, Error>(state_fn_output.commit_hook)
                     })

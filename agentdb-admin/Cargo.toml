@@ -1,0 +1,27 @@
+[package]
+name = "agentdb-admin"
+version = "0.1.0"
+edition = "2018"
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.dev.package."*"]
+opt-level = 3
+debug-assertions = false
+overflow-checks = false
+
+[dependencies]
+foundationdb = { version = "0.5.0", features = ["embedded-fdb-include"] }
+agentdb-core = { path = "../agentdb-core" }
+tokio = { version = "1.12.0", features = ["full"] }
+anyhow = "1.0.44"
+rnet = { version = "0.1.0", path = "../../rnet/rnet", features = [
+    "uuid",
+    "chrono",
+] }
+linkme = "0.2.7"
+lazy_static = "1.4.0"
+futures = "0.3.17"
+uuid = "0.8.2"
+chrono = "0.4.19"
