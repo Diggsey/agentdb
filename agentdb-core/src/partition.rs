@@ -2,7 +2,8 @@ use std::{future::Future, sync::Arc, time::Duration};
 
 use anyhow::anyhow;
 use foundationdb::{
-    options::MutationType, tuple::Versionstamp, Database, KeySelector, RangeOption, TransactOption,
+    future::FdbValue, options::MutationType, tuple::Versionstamp, Database, KeySelector,
+    RangeOption, TransactOption, Transaction,
 };
 use futures::{future::FusedFuture, select, FutureExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
@@ -11,22 +12,25 @@ use uuid::Uuid;
 use crate::{
     blob,
     cancellation::Cancellation,
+    client::{PartitionRange, AGENT_SPACE, PARTITION_COUNT_RECV, PARTITION_COUNT_SEND},
     error::Error,
     message::send_messages,
     subspace::Subspace,
-    utils::{get_first_in_range, Timestamp},
+    utils::{
+        get_first_in_range, load_partition_range, load_value, partition_for_recipient, save_value,
+        Timestamp,
+    },
     HookContext, MessageHeader, StateFn, StateFnInput, MAX_BATCH_SIZE,
 };
 
 pub static PARTITION_SPACE: Subspace<(u32,)> = Subspace::new(b"p");
-pub static PARTITION_MODIFIED: Subspace<(u32,)> = PARTITION_SPACE.subspace::<()>(b"mod");
-pub static PARTITION_AGENT_COUNT: Subspace<(u32,)> = PARTITION_SPACE.subspace::<()>(b"agent_count");
+pub static PARTITION_MODIFIED: Subspace<(u32,)> = PARTITION_SPACE.subspace(b"mod");
+pub static PARTITION_AGENT_COUNT: Subspace<(u32,)> = PARTITION_SPACE.subspace(b"agent_count");
 pub static PARTITION_MESSAGE_SPACE: Subspace<(u32, Timestamp, Versionstamp, u32)> =
-    PARTITION_SPACE.subspace::<(Timestamp, Versionstamp, u32)>(b"m");
+    PARTITION_SPACE.subspace(b"m");
 pub static PARTITION_BATCH_SPACE: Subspace<(u32, Uuid, Versionstamp)> =
-    PARTITION_SPACE.subspace::<(Uuid, Versionstamp)>(b"bt");
-pub static PARTITION_AGENT_RETRY: Subspace<(u32, Uuid)> =
-    PARTITION_SPACE.subspace::<(Uuid,)>(b"retry");
+    PARTITION_SPACE.subspace(b"bt");
+pub static PARTITION_AGENT_RETRY: Subspace<(u32, Uuid)> = PARTITION_SPACE.subspace(b"retry");
 
 const MAX_POLL_INTERVAL_SECS: u64 = 120;
 
@@ -39,7 +43,6 @@ struct PartitionState {
     root: Vec<u8>,
     partition: u32,
     cancellation: Cancellation,
-    partition_modified_key: Vec<u8>,
     state_fn: StateFn,
 }
 
@@ -55,6 +58,15 @@ struct RetryAtState {
     backoff: Duration,
 }
 
+pub fn mark_partition_modified(tx: &Transaction, root: &[u8], partition: u32) {
+    let modified_key = PARTITION_MODIFIED.key(root, (partition,));
+    tx.atomic_op(
+        &modified_key,
+        &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        MutationType::SetVersionstampedValue,
+    );
+}
+
 impl PartitionState {
     pub fn new(
         db: Arc<Database>,
@@ -67,7 +79,6 @@ impl PartitionState {
             db,
             partition,
             cancellation,
-            partition_modified_key: PARTITION_MODIFIED.key(&root, (partition,)),
             state_fn,
             root,
         }
@@ -77,34 +88,20 @@ impl PartitionState {
         // will resolve when either a new message is added, or a scheduled message becomes ready.
         self.db
             .transact_boxed(
-                (),
-                |tx, ()| {
-                    // Prepare a bunch of variables for the async block
-                    let root = self.root.clone();
-                    let partition = self.partition;
-                    let partition_modified_key = self.partition_modified_key.clone();
-                    let ts = Timestamp::now();
-                    let mut partition_message_subrange: RangeOption = PARTITION_MESSAGE_SPACE
-                        .subrange::<_, (Versionstamp, u32), _, (Versionstamp, u32)>(
-                            &self.root,
-                            (self.partition, Timestamp::zero()),
-                            (self.partition, ts),
-                        )
-                        .into();
-                    partition_message_subrange.limit = Some(u16::MAX as usize);
-                    let partition_message_fut_range: RangeOption = PARTITION_MESSAGE_SPACE
-                        .subrange::<_, (Versionstamp, u32), _, (Versionstamp, u32)>(
-                            &self.root,
-                            (self.partition, ts),
-                            (self.partition + 1, Timestamp::zero()),
-                        )
-                        .into();
+                (&self.root, self.partition),
+                |tx, &mut (root, partition)| {
+                    async move {
+                        let ts = Timestamp::now();
+                        let mut past_message_range: RangeOption = PARTITION_MESSAGE_SPACE
+                            .subrange(root, (partition, Timestamp::zero()), (partition, ts))
+                            .into();
+                        past_message_range.limit = Some(u16::MAX as usize);
+                        let future_message_range: RangeOption = PARTITION_MESSAGE_SPACE
+                            .subrange(root, (partition, ts), (partition + 1, Timestamp::zero()))
+                            .into();
 
-                    // Transaction
-                    Box::pin(async move {
                         // Find all messages which are ready to be received
-                        let mut msg_stream =
-                            tx.get_ranges(partition_message_subrange.clone(), true);
+                        let mut msg_stream = tx.get_ranges(past_message_range.clone(), true);
 
                         // Group the messages by recipient
                         let mut msg_index = 0;
@@ -141,8 +138,7 @@ impl PartitionState {
                         // Or just wait two minutes if there's no scheduled message.
                         let mut delay = Duration::from_secs(MAX_POLL_INTERVAL_SECS);
                         if let Some(msg) =
-                            get_first_in_range(tx, partition_message_fut_range.clone(), true)
-                                .await?
+                            get_first_in_range(tx, future_message_range.clone(), true).await?
                         {
                             if let Some(tuple) = PARTITION_MESSAGE_SPACE.decode(&root, msg.key()) {
                                 delay = tuple.1 - ts;
@@ -150,27 +146,32 @@ impl PartitionState {
                         }
 
                         Ok::<_, Error>(
-                            tokio::time::timeout(delay, tx.watch(&partition_modified_key)).fuse(),
+                            tokio::time::timeout(
+                                delay,
+                                tx.watch(&PARTITION_MODIFIED.key(&root, (partition,))),
+                            )
+                            .fuse(),
                         )
-                    })
+                    }
+                    .boxed()
                 },
                 TransactOption::idempotent(),
             )
             .await
     }
-    async fn find_batch_to_process(
+
+    // Finds the next recipient in the range with pending batched messages. Returns
+    // the recipient even if it's not ready to retry. The caller should skip those
+    // recipients.
+    async fn find_next_recipient(
         &mut self,
         batch_range: RangeOption<'static>,
     ) -> Result<Option<FoundRecipient>, Error> {
         self.db
             .transact_boxed(
-                (),
-                |tx, ()| {
-                    let root = self.root.clone();
-                    let partition = self.partition;
-                    let batch_range = batch_range.clone();
-
-                    Box::pin(async move {
+                (&self.root, self.partition, batch_range),
+                |tx, &mut (root, partition, ref batch_range)| {
+                    async move {
                         let (_, recipient_id, _) = if let Some(msg) =
                             get_first_in_range(tx, batch_range.clone(), false).await?
                         {
@@ -184,35 +185,34 @@ impl PartitionState {
                         let retry_at_key =
                             PARTITION_AGENT_RETRY.key(&root, (partition, recipient_id));
 
-                        let retry_at_state =
-                            if let Some(retry_at_bytes) = tx.get(&retry_at_key, false).await? {
-                                let mut retry_at_state: RetryAtState =
-                                    postcard::from_bytes(&retry_at_bytes)?;
-                                if retry_at_state.retry_at > Timestamp::now() {
-                                    return Ok(Some(FoundRecipient {
-                                        id: recipient_id,
-                                        retry_at: Some(retry_at_state.retry_at),
-                                    }));
-                                } else {
-                                    retry_at_state.retry_at += retry_at_state.backoff;
-                                    retry_at_state.backoff += retry_at_state.backoff;
-                                }
-                                retry_at_state
+                        let retry_at_state = if let Some(mut retry_at_state) =
+                            load_value::<RetryAtState>(tx, &retry_at_key, false).await?
+                        {
+                            if retry_at_state.retry_at > Timestamp::now() {
+                                return Ok(Some(FoundRecipient {
+                                    id: recipient_id,
+                                    retry_at: Some(retry_at_state.retry_at),
+                                }));
                             } else {
-                                RetryAtState {
-                                    retry_at: Timestamp::now(),
-                                    backoff: Duration::from_secs(1),
-                                }
-                            };
+                                retry_at_state.retry_at += retry_at_state.backoff;
+                                retry_at_state.backoff += retry_at_state.backoff;
+                            }
+                            retry_at_state
+                        } else {
+                            RetryAtState {
+                                retry_at: Timestamp::now(),
+                                backoff: Duration::from_secs(1),
+                            }
+                        };
 
-                        let retry_at_bytes = postcard::to_stdvec(&retry_at_state)?;
-                        tx.set(&retry_at_key, &retry_at_bytes);
+                        save_value(tx, &retry_at_key, &retry_at_state);
 
                         Ok::<_, Error>(Some(FoundRecipient {
                             id: recipient_id,
                             retry_at: None,
                         }))
-                    })
+                    }
+                    .boxed()
                 },
                 TransactOption::idempotent(),
             )
@@ -223,41 +223,35 @@ impl PartitionState {
         &mut self,
         batch_range: RangeOption<'static>,
     ) -> Result<Option<FoundRecipient>, Error> {
-        let recipient = if let Some(recipient) = self.find_batch_to_process(batch_range).await? {
+        let recipient = if let Some(recipient) = self.find_next_recipient(batch_range).await? {
             recipient
         } else {
             return Ok(None);
         };
 
+        // Skip the recipient if it's not ready to retry from an error
+        if recipient.retry_at.is_some() {
+            return Ok(Some(recipient));
+        }
+
         let max_batch_size = MAX_BATCH_SIZE;
         match self
             .db
             .transact_boxed(
-                max_batch_size,
-                |tx, max_batch_size| {
-                    let root = self.root.clone();
-                    let partition = self.partition;
-                    let state_fn = self.state_fn.clone();
-                    let retry_at_key = PARTITION_AGENT_RETRY.key(&root, (partition, recipient.id));
-                    let agent_count_key = PARTITION_AGENT_COUNT.key(&root, (partition,));
-                    let mut agent_count_delta = 0i64;
-
-                    // Automatically reduce batch size on failure
-                    if *max_batch_size > 1 {
-                        *max_batch_size >>= 1;
-                    }
-
-                    // Prepare a bunch of variables for the async block
-                    Box::pin(async move {
-                        // If this transaction commits, clear the "retry_at" flag from this agent
-                        tx.clear(&retry_at_key);
+                (&self.root, self.partition, &self.state_fn, max_batch_size),
+                |tx, &mut (root, partition, ref state_fn, ref mut max_batch_size)| {
+                    async move {
+                        // Automatically reduce batch size on failure
+                        if *max_batch_size > 1 {
+                            *max_batch_size >>= 1;
+                        }
 
                         // Load the initial agent state
                         let recipient_state = blob::load(tx, &root, recipient.id, false).await?;
 
                         // Determine the range of keys where messages are batched
                         let mut recipient_range: RangeOption = PARTITION_BATCH_SPACE
-                            .range::<_, (Versionstamp,)>(&root, (partition, recipient.id))
+                            .range(&root, (partition, recipient.id))
                             .into();
                         recipient_range.limit = Some(*max_batch_size);
 
@@ -297,36 +291,49 @@ impl PartitionState {
                             state: recipient_state,
                             messages: all_msgs,
                         };
-                        if state_fn_input.state.is_none() {
-                            // No previous state, we might be creating an agent
-                            agent_count_delta += 1;
-                        }
+                        let exist_before = state_fn_input.state.is_some();
                         let state_fn_output =
                             state_fn(state_fn_input).await.map_err(|_| StateFnError)?;
+                        let exist_after = state_fn_output.state.is_some();
 
                         if let Some(state) = state_fn_output.state {
                             blob::store(tx, &root, recipient.id, &state);
                         } else {
-                            // No new state, we might be deleting an agent
-                            agent_count_delta -= 1;
                             blob::delete(tx, &root, recipient.id);
                         }
 
                         send_messages(tx, &state_fn_output.messages, 0).await?;
 
-                        // Update partition agent count
-                        if agent_count_delta != 0 {
+                        // Clear the "retry_at" flag from this agent
+                        tx.clear(&PARTITION_AGENT_RETRY.key(&root, (partition, recipient.id)));
+
+                        // If agent was created or destroyed
+                        if exist_before != exist_after {
+                            let agent_key = AGENT_SPACE.key(&root, (recipient.id,));
+                            let agent_count_delta: i64 = if exist_after {
+                                tx.set(&agent_key, &[]);
+                                1
+                            } else {
+                                tx.clear(&agent_key);
+                                -1
+                            };
+                            // Update partition agent count
                             tx.atomic_op(
-                                &agent_count_key,
+                                &PARTITION_AGENT_COUNT.key(&root, (partition,)),
                                 &agent_count_delta.to_le_bytes(),
                                 MutationType::Add,
                             );
                         }
 
                         Ok::<_, Error>(state_fn_output.commit_hook)
-                    })
+                    }
+                    .boxed()
                 },
-                TransactOption::idempotent(),
+                TransactOption {
+                    retry_limit: Some(5),
+                    time_out: None,
+                    is_idempotent: true,
+                },
             )
             .await
         {
@@ -337,7 +344,10 @@ impl PartitionState {
                 });
             }
             Err(e) if e.0.is::<StateFnError>() => {
-                // Skip
+                // If the error was returned by the state function,
+                // there's nothing we can do to progress the agent,
+                // so just move on.
+                log::error!("{}", e);
             }
             Err(e) => return Err(e),
         }
@@ -347,7 +357,7 @@ impl PartitionState {
     async fn process_batches(&mut self) -> Result<Option<Timestamp>, Error> {
         // Begin with the entire partition range
         let mut batch_range: RangeOption = PARTITION_BATCH_SPACE
-            .range::<_, (Uuid, Versionstamp)>(&self.root, (self.partition,))
+            .range(&self.root, (self.partition,))
             .into();
 
         // If no messages found, retry after the maximum interval
@@ -358,7 +368,7 @@ impl PartitionState {
             // If we found and processed a batch, advance our range to exclude that agent
             batch_range.begin = KeySelector::first_greater_or_equal(
                 PARTITION_BATCH_SPACE
-                    .range::<_, (Versionstamp,)>(&self.root, (self.partition, recipient.id))
+                    .range(&self.root, (self.partition, recipient.id))
                     .1,
             );
 
@@ -368,7 +378,110 @@ impl PartitionState {
         }
         Ok(overall_retry_at)
     }
+    async fn move_messages(
+        &self,
+        range: RangeOption<'_>,
+        conv: impl FnMut(&FdbValue) -> Result<Vec<u8>, Error> + Send,
+    ) -> Result<bool, Error> {
+        self.db
+            .transact_boxed(
+                (range, conv),
+                |tx, (range, conv)| {
+                    async move {
+                        let mut msg_stream = tx.get_ranges(range.clone(), false);
+                        let mut more = false;
+                        while let Some(batch) = msg_stream.try_next().await? {
+                            more = batch.more();
+                            for item in batch {
+                                tx.clear(item.key());
+                                let new_key = conv(&item)?;
+                                tx.set(&new_key, item.value());
+                            }
+                        }
+
+                        Ok::<_, Error>(more)
+                    }
+                    .boxed()
+                },
+                TransactOption::idempotent(),
+            )
+            .await
+    }
+    async fn migrate_messages(&self, partition_range_send: PartitionRange) -> Result<(), Error> {
+        // Migrate unbatched messages
+        let mut partition_message_range: RangeOption = PARTITION_MESSAGE_SPACE
+            .range(&self.root, (self.partition,))
+            .into();
+        partition_message_range.limit = Some(u16::MAX as usize);
+        while self
+            .move_messages(partition_message_range.clone(), |item| {
+                let mut key_parts = PARTITION_MESSAGE_SPACE
+                    .decode(&self.root, item.key())
+                    .ok_or_else(|| {
+                        Error(anyhow!(
+                            "Failed to decode message key whilst migrating partitions"
+                        ))
+                    })?;
+                let msg_hdr = postcard::from_bytes::<MessageHeader>(item.value())?;
+                let new_partition =
+                    partition_for_recipient(msg_hdr.recipient_id, partition_range_send);
+                key_parts.0 = new_partition;
+                let new_key = PARTITION_MESSAGE_SPACE.key(&self.root, key_parts);
+                Ok(new_key)
+            })
+            .await?
+        {}
+        // Migrate batched messages
+        let mut partition_message_range: RangeOption = PARTITION_BATCH_SPACE
+            .range(&self.root, (self.partition,))
+            .into();
+        partition_message_range.limit = Some(u16::MAX as usize);
+        while self
+            .move_messages(partition_message_range.clone(), |item| {
+                let mut key_parts = PARTITION_BATCH_SPACE
+                    .decode(&self.root, item.key())
+                    .ok_or_else(|| {
+                        Error(anyhow!(
+                            "Failed to decode message key whilst migrating partitions"
+                        ))
+                    })?;
+                let new_partition = partition_for_recipient(key_parts.1, partition_range_send);
+                key_parts.0 = new_partition;
+                let new_key = PARTITION_BATCH_SPACE.key(&self.root, key_parts);
+                Ok(new_key)
+            })
+            .await?
+        {}
+        Ok(())
+    }
+    async fn maybe_migrate_messages(&self) -> Result<(), Error> {
+        // Load the partition send and receive ranges
+        let (partition_range_recv, partition_range_send) = self
+            .db
+            .transact_boxed(
+                &self.root,
+                |tx, &mut root| {
+                    async move {
+                        let partition_range_recv =
+                            load_partition_range(tx, root, &PARTITION_COUNT_RECV, true).await?;
+                        let partition_range_send =
+                            load_partition_range(tx, root, &PARTITION_COUNT_SEND, true).await?;
+                        Ok::<_, Error>((partition_range_recv, partition_range_send))
+                    }
+                    .boxed()
+                },
+                TransactOption::idempotent(),
+            )
+            .await?;
+
+        if partition_range_recv != partition_range_send {
+            self.migrate_messages(partition_range_send).await?;
+        }
+
+        Ok(())
+    }
     async fn step(&mut self) -> Result<(), Error> {
+        self.maybe_migrate_messages().await?;
         let watch_fut = self.rollup_messages().await?;
         let maybe_retry_at = self.process_batches().await?;
 

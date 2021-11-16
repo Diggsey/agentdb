@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use agentdb_core::{blob, Error};
 use anyhow::anyhow;
@@ -20,6 +20,9 @@ pub struct DynAgentRef {
 }
 
 impl DynAgentRef {
+    pub const fn from_parts(root: Root, id: Uuid) -> Self {
+        Self { root, id }
+    }
     pub fn unchecked_downcast<A: Agent>(self) -> AgentRef<A> {
         AgentRef {
             inner: self,
@@ -71,9 +74,9 @@ impl<A: Agent> From<AgentRef<A>> for DynAgentRef {
     }
 }
 
-pub struct AgentRef<A: Agent> {
+pub struct AgentRef<A> {
     inner: DynAgentRef,
-    phantom: PhantomData<fn(A) -> A>,
+    phantom: PhantomData<Arc<Mutex<A>>>,
 }
 
 impl<A: Agent> Copy for AgentRef<A> {}
@@ -110,6 +113,15 @@ impl<'de, A: Agent> Deserialize<'de> for AgentRef<A> {
             inner,
             phantom: PhantomData,
         })
+    }
+}
+
+impl<A> AgentRef<A> {
+    pub const fn from_parts_unchecked(root: Root, id: Uuid) -> Self {
+        Self {
+            inner: DynAgentRef::from_parts(root, id),
+            phantom: PhantomData,
+        }
     }
 }
 

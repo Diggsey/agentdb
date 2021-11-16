@@ -36,14 +36,14 @@ namespace AgentdbAdmin
             this.openConnectionButton = new System.Windows.Forms.ToolStripSplitButton();
             this.toolStripSeparator = new System.Windows.Forms.ToolStripSeparator();
             this.refreshButton = new System.Windows.Forms.ToolStripButton();
+            this.autoRefreshLabel = new System.Windows.Forms.ToolStripLabel();
+            this.autoRefreshBox = new System.Windows.Forms.ToolStripComboBox();
             this.connectionTabs = new System.Windows.Forms.TabControl();
             this.statusStrip = new System.Windows.Forms.StatusStrip();
             this.statusLabel = new System.Windows.Forms.ToolStripStatusLabel();
             this.statusProgressBar = new System.Windows.Forms.ToolStripProgressBar();
             this.openFileDialog = new System.Windows.Forms.OpenFileDialog();
             this.closeTabButton = new System.Windows.Forms.Button();
-            this.autoRefreshBox = new System.Windows.Forms.ToolStripComboBox();
-            this.autoRefreshLabel = new System.Windows.Forms.ToolStripLabel();
             this.autoRefreshTimer = new System.Windows.Forms.Timer(this.components);
             this.toolStrip.SuspendLayout();
             this.statusStrip.SuspendLayout();
@@ -102,6 +102,26 @@ namespace AgentdbAdmin
             this.refreshButton.Visible = false;
             this.refreshButton.Click += new System.EventHandler(this.refreshButton_Click);
             // 
+            // autoRefreshLabel
+            // 
+            this.autoRefreshLabel.Name = "autoRefreshLabel";
+            this.autoRefreshLabel.Size = new System.Drawing.Size(78, 22);
+            this.autoRefreshLabel.Text = "Auto Refresh:";
+            this.autoRefreshLabel.Visible = false;
+            // 
+            // autoRefreshBox
+            // 
+            this.autoRefreshBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.autoRefreshBox.Items.AddRange(new object[] {
+            "Never",
+            "1 second",
+            "5 seconds",
+            "30 seconds"});
+            this.autoRefreshBox.Name = "autoRefreshBox";
+            this.autoRefreshBox.Size = new System.Drawing.Size(121, 25);
+            this.autoRefreshBox.Visible = false;
+            this.autoRefreshBox.SelectedIndexChanged += new System.EventHandler(this.autoRefreshBox_SelectedIndexChanged);
+            // 
             // connectionTabs
             // 
             this.connectionTabs.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -109,7 +129,7 @@ namespace AgentdbAdmin
             this.connectionTabs.Multiline = true;
             this.connectionTabs.Name = "connectionTabs";
             this.connectionTabs.SelectedIndex = 0;
-            this.connectionTabs.Size = new System.Drawing.Size(1019, 443);
+            this.connectionTabs.Size = new System.Drawing.Size(1019, 421);
             this.connectionTabs.TabIndex = 3;
             // 
             // statusStrip
@@ -155,26 +175,6 @@ namespace AgentdbAdmin
             this.closeTabButton.Visible = false;
             this.closeTabButton.Click += new System.EventHandler(this.closeTabButton_Click);
             // 
-            // autoRefreshBox
-            // 
-            this.autoRefreshBox.Items.AddRange(new object[] {
-            "Never",
-            "1 second",
-            "5 seconds",
-            "30 seconds"});
-            this.autoRefreshBox.Name = "autoRefreshBox";
-            this.autoRefreshBox.Size = new System.Drawing.Size(121, 25);
-            this.autoRefreshBox.Text = "Never";
-            this.autoRefreshBox.Visible = false;
-            this.autoRefreshBox.SelectedIndexChanged += new System.EventHandler(this.autoRefreshBox_SelectedIndexChanged);
-            // 
-            // autoRefreshLabel
-            // 
-            this.autoRefreshLabel.Name = "autoRefreshLabel";
-            this.autoRefreshLabel.Size = new System.Drawing.Size(78, 22);
-            this.autoRefreshLabel.Text = "Auto Refresh:";
-            this.autoRefreshLabel.Visible = false;
-            // 
             // autoRefreshTimer
             // 
             this.autoRefreshTimer.Tick += new System.EventHandler(this.autoRefreshTimer_Tick);
@@ -185,9 +185,9 @@ namespace AgentdbAdmin
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1019, 468);
             this.Controls.Add(this.closeTabButton);
-            this.Controls.Add(this.statusStrip);
             this.Controls.Add(this.connectionTabs);
             this.Controls.Add(this.toolStrip);
+            this.Controls.Add(this.statusStrip);
             this.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(254)));
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.Margin = new System.Windows.Forms.Padding(2);

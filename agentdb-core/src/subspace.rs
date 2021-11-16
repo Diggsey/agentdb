@@ -2,7 +2,6 @@ use std::{convert::TryInto, marker::PhantomData};
 
 use byteorder::{ByteOrder, LittleEndian};
 use foundationdb::tuple::Versionstamp;
-use tupleops::{ConcatTuples, TupleConcat};
 use uuid::Uuid;
 
 use crate::Timestamp;
@@ -38,9 +37,9 @@ impl<T> Subspace<T> {
             phantom: PhantomData,
         }
     }
-    pub const fn subspace<U>(&'static self, prefix: &'static [u8]) -> Subspace<ConcatTuples<T, U>>
+    pub const fn subspace<U>(&'static self, prefix: &'static [u8]) -> Subspace<U>
     where
-        (T, U): TupleConcat<T, U>,
+        (T, U): IsPrefix,
     {
         Subspace {
             inner: UntypedSubspace {
@@ -50,9 +49,9 @@ impl<T> Subspace<T> {
             phantom: PhantomData,
         }
     }
-    fn build<U, V>(&self, root: &[u8], args: U, is_end: bool) -> Vec<u8>
+    pub fn build<U>(&self, root: &[u8], args: U, is_end: bool) -> Vec<u8>
     where
-        (U, V): TupleConcat<U, V, Type = T>,
+        T: HasPrefix<U>,
         U: Pack,
     {
         let mut buffer = root.to_vec();
@@ -72,13 +71,13 @@ impl<T> Subspace<T> {
     pub fn key(&self, root: &[u8], args: T) -> Vec<u8>
     where
         T: Pack,
-        (T, ()): TupleConcat<T, (), Type = T>,
+        T: HasPrefix<T>,
     {
-        self.build::<T, ()>(root, args, false)
+        self.build(root, args, false)
     }
-    pub fn range<U, V>(&self, root: &[u8], args: U) -> (Vec<u8>, Vec<u8>)
+    pub fn range<U>(&self, root: &[u8], args: U) -> (Vec<u8>, Vec<u8>)
     where
-        (U, V): TupleConcat<U, V, Type = T>,
+        T: HasPrefix<U>,
         U: Pack,
     {
         let start = self.build(root, args, false);
@@ -86,12 +85,11 @@ impl<T> Subspace<T> {
 
         (start, end)
     }
-    pub fn subrange<U, V, W, X>(&self, root: &[u8], from: U, to: W) -> (Vec<u8>, Vec<u8>)
+    pub fn subrange<U, V>(&self, root: &[u8], from: U, to: V) -> (Vec<u8>, Vec<u8>)
     where
-        (U, V): TupleConcat<U, V, Type = T>,
-        (W, X): TupleConcat<W, X, Type = T>,
+        T: HasPrefix<U> + HasPrefix<V>,
         U: Pack,
-        W: Pack,
+        V: Pack,
     {
         (self.build(root, from, false), self.build(root, to, true))
     }
@@ -143,15 +141,18 @@ pub trait Pack: Sized {
 }
 
 pub trait HasPrefix<T> {}
+pub trait IsPrefix {}
 
 macro_rules! tuple_impls {
     (@expand2 ($($prefix:ident),*)) => {
         impl<$($prefix,)*> HasPrefix<($($prefix,)*)> for ($($prefix,)*) {}
+        impl<$($prefix,)*> IsPrefix for (($($prefix,)*), ($($prefix,)*)) {}
     };
     (@expand2 ($($prefix:ident),*) $head:ident $(, $tail:ident)*) => {
         tuple_impls!(@expand2 ($($prefix,)* $head) $($tail),*);
 
         impl<$($prefix,)* $head $(, $tail)*> HasPrefix<($($prefix,)*)> for ($($prefix,)* $head, $($tail,)*) {}
+        impl<$($prefix,)* $head $(, $tail)*> IsPrefix for (($($prefix,)*), ($($prefix,)* $head, $($tail,)*)) {}
     };
     (@expand $($t:ident),*) => {
         tuple_impls!(@expand2 () $($t),*);
@@ -245,6 +246,52 @@ impl Pack for Timestamp {
     }
     fn unpack(buffer: &mut &[u8]) -> Option<Self> {
         Some(Self::from_millis(i64::unpack(buffer)?))
+    }
+}
+
+fn pack_bytes(slice: &[u8], packer: &mut Packer) {
+    // We encode as null-terminated, so use byte value 1 as an
+    // escape byte. 0 is encoded as 1,2 whilst 1 is encoded as 1,3.
+    packer.buffer.reserve(slice.len() + 1);
+    for &b in slice {
+        if b < 2 {
+            packer.buffer.push(1);
+            packer.buffer.push(b + 2);
+        } else {
+            packer.buffer.push(b);
+        }
+    }
+    packer.buffer.push(0);
+}
+
+impl Pack for Vec<u8> {
+    fn pack(&self, packer: &mut Packer) {
+        pack_bytes(self, packer);
+    }
+    fn unpack(buffer: &mut &[u8]) -> Option<Self> {
+        let mut res = Vec::new();
+        loop {
+            let b = buffer[0];
+            *buffer = &buffer[1..];
+            match b {
+                0 => break,
+                1 => {
+                    res.push(buffer[0] - 2);
+                    *buffer = &buffer[1..];
+                }
+                _ => res.push(b),
+            }
+        }
+        Some(res)
+    }
+}
+
+impl Pack for String {
+    fn pack(&self, packer: &mut Packer) {
+        pack_bytes(self.as_bytes(), packer);
+    }
+    fn unpack(buffer: &mut &[u8]) -> Option<Self> {
+        String::from_utf8(Vec::<u8>::unpack(buffer)?).ok()
     }
 }
 

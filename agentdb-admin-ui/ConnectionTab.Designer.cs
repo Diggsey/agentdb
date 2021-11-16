@@ -34,46 +34,22 @@ namespace AgentdbAdmin
             System.Windows.Forms.GroupBox databaseToolsGroupBox;
             System.Windows.Forms.FlowLayoutPanel databaseToolsLayoutPanel;
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(ConnectionTab));
-            this.tabControl = new System.Windows.Forms.TabControl();
-            this.homePage = new System.Windows.Forms.TabPage();
             this.rootList = new System.Windows.Forms.ListBox();
             this.fdbConsoleButton = new System.Windows.Forms.Button();
+            this.tabControl = new System.Windows.Forms.TabControl();
+            this.homePage = new System.Windows.Forms.TabPage();
             this.closeTabButton = new System.Windows.Forms.Button();
             tableLayoutPanel = new System.Windows.Forms.TableLayoutPanel();
             rootListGroupBox = new System.Windows.Forms.GroupBox();
             databaseToolsGroupBox = new System.Windows.Forms.GroupBox();
             databaseToolsLayoutPanel = new System.Windows.Forms.FlowLayoutPanel();
-            this.tabControl.SuspendLayout();
-            this.homePage.SuspendLayout();
             tableLayoutPanel.SuspendLayout();
             rootListGroupBox.SuspendLayout();
             databaseToolsGroupBox.SuspendLayout();
             databaseToolsLayoutPanel.SuspendLayout();
+            this.tabControl.SuspendLayout();
+            this.homePage.SuspendLayout();
             this.SuspendLayout();
-            // 
-            // tabControl
-            // 
-            this.tabControl.Controls.Add(this.homePage);
-            this.tabControl.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.tabControl.Location = new System.Drawing.Point(0, 0);
-            this.tabControl.Margin = new System.Windows.Forms.Padding(2);
-            this.tabControl.Name = "tabControl";
-            this.tabControl.SelectedIndex = 0;
-            this.tabControl.Size = new System.Drawing.Size(688, 447);
-            this.tabControl.TabIndex = 0;
-            this.tabControl.SelectedIndexChanged += new System.EventHandler(this.tabControl_SelectedIndexChanged);
-            // 
-            // homePage
-            // 
-            this.homePage.Controls.Add(tableLayoutPanel);
-            this.homePage.Location = new System.Drawing.Point(4, 29);
-            this.homePage.Margin = new System.Windows.Forms.Padding(2);
-            this.homePage.Name = "homePage";
-            this.homePage.Padding = new System.Windows.Forms.Padding(2);
-            this.homePage.Size = new System.Drawing.Size(680, 414);
-            this.homePage.TabIndex = 0;
-            this.homePage.Text = "Home";
-            this.homePage.UseVisualStyleBackColor = true;
             // 
             // tableLayoutPanel
             // 
@@ -145,6 +121,31 @@ namespace AgentdbAdmin
             this.fdbConsoleButton.Text = "FoundationDB Console";
             this.fdbConsoleButton.UseVisualStyleBackColor = true;
             // 
+            // tabControl
+            // 
+            this.tabControl.Controls.Add(this.homePage);
+            this.tabControl.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.tabControl.Location = new System.Drawing.Point(0, 0);
+            this.tabControl.Margin = new System.Windows.Forms.Padding(2);
+            this.tabControl.Name = "tabControl";
+            this.tabControl.SelectedIndex = 0;
+            this.tabControl.Size = new System.Drawing.Size(688, 447);
+            this.tabControl.TabIndex = 0;
+            this.tabControl.SelectedIndexChanged += new System.EventHandler(this.tabControl_SelectedIndexChanged);
+            this.tabControl.Deselecting += new System.Windows.Forms.TabControlCancelEventHandler(this.tabControl_Deselecting);
+            // 
+            // homePage
+            // 
+            this.homePage.Controls.Add(tableLayoutPanel);
+            this.homePage.Location = new System.Drawing.Point(4, 29);
+            this.homePage.Margin = new System.Windows.Forms.Padding(2);
+            this.homePage.Name = "homePage";
+            this.homePage.Padding = new System.Windows.Forms.Padding(2);
+            this.homePage.Size = new System.Drawing.Size(680, 414);
+            this.homePage.TabIndex = 0;
+            this.homePage.Text = "Home";
+            this.homePage.UseVisualStyleBackColor = true;
+            // 
             // closeTabButton
             // 
             this.closeTabButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
@@ -169,12 +170,12 @@ namespace AgentdbAdmin
             this.Name = "ConnectionTab";
             this.Size = new System.Drawing.Size(688, 447);
             this.Load += new System.EventHandler(this.ConnectionTab_Load);
-            this.tabControl.ResumeLayout(false);
-            this.homePage.ResumeLayout(false);
             tableLayoutPanel.ResumeLayout(false);
             rootListGroupBox.ResumeLayout(false);
             databaseToolsGroupBox.ResumeLayout(false);
             databaseToolsLayoutPanel.ResumeLayout(false);
+            this.tabControl.ResumeLayout(false);
+            this.homePage.ResumeLayout(false);
             this.ResumeLayout(false);
 
         }

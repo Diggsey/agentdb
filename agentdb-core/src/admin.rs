@@ -2,20 +2,25 @@ use std::{
     collections::{btree_map::Entry, BTreeMap},
     ops::Range,
     sync::Arc,
+    time::Duration,
 };
 
+use anyhow::anyhow;
 use byteorder::{ByteOrder, LittleEndian};
-use foundationdb::{tuple::Versionstamp, Database, RangeOption, TransactOption, Transaction};
+use foundationdb::{options::StreamingMode, Database, RangeOption, TransactOption, Transaction};
 use futures::{stream, FutureExt, Stream, TryStreamExt};
 use uuid::Uuid;
 
 use crate::{
     client::{
-        ClientValue, PartitionAssignment, PartitionRange, CLIENT_SPACE, PARTITION_COUNT_RECV,
-        PARTITION_COUNT_SEND,
+        ClientValue, PartitionAssignment, PartitionRange, AGENT_SPACE, CLIENT_SPACE,
+        PARTITION_COUNT_RECV, PARTITION_COUNT_SEND,
     },
-    partition::{PARTITION_AGENT_COUNT, PARTITION_BATCH_SPACE, PARTITION_MESSAGE_SPACE},
-    utils::load_partition_range,
+    partition::{
+        mark_partition_modified, PARTITION_AGENT_COUNT, PARTITION_BATCH_SPACE,
+        PARTITION_MESSAGE_SPACE,
+    },
+    utils::{load_partition_range, range_is_empty, save_value},
     Error, MessageHeader, Timestamp,
 };
 
@@ -28,7 +33,7 @@ async fn find_next_root(db: &Database, from: &[u8]) -> Result<Option<Vec<u8>>, E
                 while let Some(range) = ranges.try_next().await? {
                     for kv in range {
                         let k = kv.key();
-                        if let Some(prefix) = k.strip_suffix(b".agentdb/") {
+                        if let Some(prefix) = k.strip_suffix(b".!agentdb/") {
                             if kv.value() == b"agentdb" {
                                 return Ok(Some(prefix.to_vec()));
                             }
@@ -195,9 +200,8 @@ async fn describe_partition(
         .unwrap_or(0);
 
     // Load pending messages
-    let mut pending_messages_range: RangeOption = PARTITION_MESSAGE_SPACE
-        .range::<_, (Timestamp, Versionstamp, u32)>(root, (partition,))
-        .into();
+    let mut pending_messages_range: RangeOption =
+        PARTITION_MESSAGE_SPACE.range(root, (partition,)).into();
     pending_messages_range.limit = Some(DESC_LIMIT);
     let mut pending_message_stream = tx.get_ranges(pending_messages_range, true);
     let mut pending_messages = Vec::new();
@@ -222,9 +226,8 @@ async fn describe_partition(
     }
 
     // Load batched messages
-    let mut batched_messages_range: RangeOption = PARTITION_BATCH_SPACE
-        .range::<_, (Uuid, Versionstamp)>(root, (partition,))
-        .into();
+    let mut batched_messages_range: RangeOption =
+        PARTITION_BATCH_SPACE.range(root, (partition,)).into();
     batched_messages_range.limit = Some(DESC_LIMIT);
     let mut batched_message_stream = tx.get_ranges(batched_messages_range, true);
     let mut batched_messages = Vec::new();
@@ -276,9 +279,9 @@ pub async fn describe_root(db: Arc<Database>, root: &[u8]) -> Result<RootDesc, E
         |tx, &mut root| {
             async move {
                 let partition_range_send =
-                    load_partition_range(tx, root, &PARTITION_COUNT_SEND).await?;
+                    load_partition_range(tx, root, &PARTITION_COUNT_SEND, true).await?;
                 let partition_range_recv =
-                    load_partition_range(tx, root, &PARTITION_COUNT_RECV).await?;
+                    load_partition_range(tx, root, &PARTITION_COUNT_RECV, true).await?;
 
                 let clients = describe_clients(tx, root, partition_range_recv).await?;
                 let partitions = describe_partitions(
@@ -295,6 +298,163 @@ pub async fn describe_root(db: Arc<Database>, root: &[u8]) -> Result<RootDesc, E
                     clients,
                     partitions,
                 })
+            }
+            .boxed()
+        },
+        TransactOption::idempotent(),
+    )
+    .await
+}
+
+async fn wait_for_empty_partitions(
+    db: Arc<Database>,
+    root: &[u8],
+    partition_range: PartitionRange,
+) -> Result<(), Error> {
+    while !db
+        .transact_boxed(
+            root,
+            |tx, &mut root| {
+                async move {
+                    let message_range: RangeOption = PARTITION_MESSAGE_SPACE
+                        .subrange(
+                            root,
+                            (partition_range.offset,),
+                            (partition_range.offset + partition_range.count,),
+                        )
+                        .into();
+                    let batch_range: RangeOption = PARTITION_BATCH_SPACE
+                        .subrange(
+                            root,
+                            (partition_range.offset,),
+                            (partition_range.offset + partition_range.count,),
+                        )
+                        .into();
+                    let is_empty = range_is_empty(tx, message_range, true).await?
+                        && range_is_empty(tx, batch_range, true).await?;
+
+                    Ok::<_, Error>(is_empty)
+                }
+                .boxed()
+            },
+            TransactOption::idempotent(),
+        )
+        .await?
+    {
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
+    Ok(())
+}
+
+pub async fn change_partitions(
+    db: Arc<Database>,
+    root: &[u8],
+    desired_partition_range: Range<u32>,
+) -> Result<(), Error> {
+    let desired_partition_range = PartitionRange {
+        offset: desired_partition_range.start,
+        count: desired_partition_range.end - desired_partition_range.start,
+    };
+    if let Some(old_partition_range) = db
+        .transact_boxed(
+            root,
+            |tx, &mut root| {
+                async move {
+                    let partition_range_recv =
+                        load_partition_range(tx, root, &PARTITION_COUNT_RECV, false).await?;
+                    let partition_range_send =
+                        load_partition_range(tx, root, &PARTITION_COUNT_SEND, false).await?;
+
+                    if partition_range_recv == partition_range_send {
+                        // No partition change operation in progress
+                        if partition_range_recv == desired_partition_range {
+                            // Already complete...
+                            return Ok(None);
+                        }
+                        // Begin a new partition change operation
+                        save_value(
+                            tx,
+                            &PARTITION_COUNT_SEND.key(root, ()),
+                            &desired_partition_range,
+                        );
+
+                        // Wake up all the old partitions
+                        for partition in partition_range_recv.offset
+                            ..(partition_range_recv.offset + partition_range_recv.count)
+                        {
+                            mark_partition_modified(tx, root, partition);
+                        }
+                    } else {
+                        // Partition change already in progress
+                        if partition_range_send != desired_partition_range {
+                            return Err(Error(anyhow!(
+                            "Partition change operation already in progress with different target"
+                        )));
+                        }
+                    }
+
+                    Ok::<_, Error>(Some(partition_range_recv))
+                }
+                .boxed()
+            },
+            TransactOption::idempotent(),
+        )
+        .await?
+    {
+        // Wait for all messages to be migrated away from the old partitions
+        wait_for_empty_partitions(db.clone(), root, old_partition_range).await?;
+
+        // Allow clients to begin processing from the new partitions
+        db.transact_boxed(
+            root,
+            |tx, &mut root| {
+                async move {
+                    let partition_range_recv =
+                        load_partition_range(tx, root, &PARTITION_COUNT_RECV, false).await?;
+                    if partition_range_recv == old_partition_range {
+                        save_value(
+                            tx,
+                            &PARTITION_COUNT_RECV.key(root, ()),
+                            &desired_partition_range,
+                        );
+                    }
+                    Ok::<_, Error>(())
+                }
+                .boxed()
+            },
+            TransactOption::idempotent(),
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+pub async fn list_agents(
+    db: Arc<Database>,
+    root: &[u8],
+    from: Uuid,
+    limit: usize,
+    reverse: bool,
+) -> Result<Vec<Uuid>, Error> {
+    db.transact_boxed(
+        root,
+        |tx, &mut root| {
+            async move {
+                let mut range: RangeOption = if reverse {
+                    AGENT_SPACE.subrange(root, (), (from,))
+                } else {
+                    AGENT_SPACE.subrange(root, (from,), ())
+                }
+                .into();
+                range.limit = Some(limit);
+                range.mode = StreamingMode::WantAll;
+                range.reverse = reverse;
+                let values = tx.get_range(&range, 0, true).await?;
+                Ok(values
+                    .into_iter()
+                    .flat_map(|value| AGENT_SPACE.decode(root, value.key()))
+                    .map(|x| x.0)
+                    .collect())
             }
             .boxed()
         },

@@ -51,10 +51,22 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="BlobViewTab.cs">
+    <Compile Include="Modals\RepartitionModal.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Modals\RepartitionModal.Designer.cs">
+      <DependentUpon>RepartitionModal.cs</DependentUpon>
+    </Compile>
+    <Compile Include="ViewTabs\AgentListViewTab.cs">
       <SubType>UserControl</SubType>
     </Compile>
-    <Compile Include="BlobViewTab.Designer.cs">
+    <Compile Include="ViewTabs\AgentListViewTab.Designer.cs">
+      <DependentUpon>AgentListViewTab.cs</DependentUpon>
+    </Compile>
+    <Compile Include="ViewTabs\BlobViewTab.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="ViewTabs\BlobViewTab.Designer.cs">
       <DependentUpon>BlobViewTab.cs</DependentUpon>
     </Compile>
     <Compile Include="ConnectionTab.cs">
@@ -72,16 +84,22 @@
     <Compile Include="Generated.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="RootViewTab.cs">
+    <Compile Include="ViewTabs\RootViewTab.cs">
       <SubType>UserControl</SubType>
     </Compile>
-    <Compile Include="RootViewTab.Designer.cs">
+    <Compile Include="ViewTabs\RootViewTab.Designer.cs">
       <DependentUpon>RootViewTab.cs</DependentUpon>
     </Compile>
     <Compile Include="Settings.cs" />
-    <Compile Include="IViewTab.cs" />
+    <Compile Include="ViewTabs\IViewTab.cs" />
     <Compile Include="Utils.cs" />
-    <EmbeddedResource Include="BlobViewTab.resx">
+    <EmbeddedResource Include="Modals\RepartitionModal.resx">
+      <DependentUpon>RepartitionModal.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="ViewTabs\AgentListViewTab.resx">
+      <DependentUpon>AgentListViewTab.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="ViewTabs\BlobViewTab.resx">
       <DependentUpon>BlobViewTab.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="ConnectionTab.resx">
@@ -100,7 +118,7 @@
       <DependentUpon>Resources.resx</DependentUpon>
       <DesignTime>True</DesignTime>
     </Compile>
-    <EmbeddedResource Include="RootViewTab.resx">
+    <EmbeddedResource Include="ViewTabs\RootViewTab.resx">
       <DependentUpon>RootViewTab.cs</DependentUpon>
     </EmbeddedResource>
     <None Include="packages.config" />

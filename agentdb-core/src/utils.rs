@@ -7,9 +7,17 @@ use std::{
 use chrono::{DateTime, TimeZone, Utc};
 use foundationdb::{future::FdbValue, FdbError, RangeOption, Transaction};
 use futures::TryStreamExt;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::{client::PartitionRange, subspace::Subspace, DEFAULT_PARTITION_RANGE};
+
+pub fn partition_for_recipient(recipient_id: Uuid, partition_range: PartitionRange) -> u32 {
+    let hash = recipient_id.as_u128();
+    let hash = ((hash >> 64) ^ hash) as u64;
+    let hash = ((hash >> 32) ^ hash) as u32;
+    (hash % partition_range.count) + partition_range.offset
+}
 
 pub async fn get_first_in_range(
     tx: &Transaction,
@@ -26,17 +34,42 @@ pub async fn get_first_in_range(
     Ok(None)
 }
 
+pub async fn range_is_empty(
+    tx: &Transaction,
+    range: RangeOption<'_>,
+    snapshot: bool,
+) -> Result<bool, FdbError> {
+    Ok(get_first_in_range(tx, range, snapshot).await?.is_none())
+}
+
+pub async fn load_value<T: DeserializeOwned>(
+    tx: &Transaction,
+    key: &[u8],
+    snapshot: bool,
+) -> Result<Option<T>, FdbError> {
+    Ok(tx
+        .get(key, snapshot)
+        .await?
+        .as_deref()
+        .and_then(|slice| postcard::from_bytes(slice).ok()))
+}
+
+pub fn save_value<T: Serialize>(tx: &Transaction, key: &[u8], value: &T) {
+    tx.set(
+        key,
+        &postcard::to_stdvec(value).expect("Infallible serialization"),
+    );
+}
+
 pub async fn load_partition_range(
     tx: &Transaction,
     root: &[u8],
     space: &Subspace<()>,
+    snapshot: bool,
 ) -> Result<PartitionRange, FdbError> {
     let key = space.key(root, ());
-    Ok(tx
-        .get(&key, true)
+    Ok(load_value(tx, &key, snapshot)
         .await?
-        .as_deref()
-        .and_then(|slice| postcard::from_bytes(slice).ok())
         .unwrap_or(DEFAULT_PARTITION_RANGE))
 }
 

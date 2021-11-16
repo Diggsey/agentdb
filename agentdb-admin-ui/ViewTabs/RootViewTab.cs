@@ -56,6 +56,8 @@ namespace AgentdbAdmin
             sendPartitionLabel.Visible = tag == null;
             recvPartitionBox.Visible = tag == null;
             recvPartitionLabel.Visible = tag == null;
+            repartitionButton.Visible = tag == null;
+            actionsLabel.Visible = repartitionButton.Visible;
 
             var selectedPartitions = new SortedSet<uint>();
 
@@ -296,6 +298,27 @@ namespace AgentdbAdmin
                     });
                 }
             }
+        }
+
+        private async void repartitionButton_Click(object sender, EventArgs e)
+        {
+            var dialog = new Modals.RepartitionModal();
+            dialog.RootName = Utils.StringifyBytes(root);
+            dialog.PartitionRecvRange = rootDesc.partitionRangeRecv;
+            dialog.PartitionSendRange = rootDesc.partitionRangeSend;
+            dialog.NewPartitionRange = rootDesc.partitionRangeSend;
+            if (dialog.ShowDialog(parent.MainForm) == DialogResult.OK)
+            {
+                await parent.MainForm.PerformAsync<AgentdbAdmin.NoResult>("Re-partitioning root", continuation =>
+                {
+                    AgentdbAdmin.ChangePartitions(connectionHandle, this.root, dialog.NewPartitionRange, continuation);
+                });
+            }
+        }
+
+        private void listAgentsButton_Click(object sender, EventArgs e)
+        {
+            parent.OpenPage(new ConnectionTab.ListAgentsPageId() { Root = root });
         }
     }
 }

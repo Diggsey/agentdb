@@ -1,8 +1,11 @@
 #[macro_export]
 macro_rules! declare_root {
     ($name:literal => $v:ident) => {
-        pub static $v: $crate::Root = $crate::Root::new($name);
-        $crate::hidden::inventory::submit! { $v }
+        pub const $v: $crate::Root = $crate::Root::new($name);
+        const _: () = {
+            static STATIC_ROOT: $crate::Root = $v;
+            $crate::hidden::inventory::submit! { STATIC_ROOT }
+        };
     };
 }
 

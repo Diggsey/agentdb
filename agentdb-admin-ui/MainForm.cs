@@ -19,6 +19,7 @@ namespace AgentdbAdmin
         public MainForm()
         {
             InitializeComponent();
+            autoRefreshBox.SelectedIndex = 0;
 
             switch (Environment.OSVersion.Platform)
             {
@@ -62,9 +63,7 @@ namespace AgentdbAdmin
         {
             SuspendLayout();
             bool actionsVisible = connectionTabs.TabPages.Count > 0;
-            bool actionsEnabled = backgroundTasks.Count == 0 && actionsVisible;
             toolStripSeparator.Visible = actionsVisible;
-            refreshButton.Enabled = actionsEnabled;
             refreshButton.Visible = actionsVisible;
             closeTabButton.Visible = actionsVisible;
             autoRefreshLabel.Visible = actionsVisible;

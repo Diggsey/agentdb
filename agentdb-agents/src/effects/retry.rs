@@ -52,6 +52,7 @@ impl RetryBackoff {
     }
 }
 
+// Effect agent which will automatically retry a callback
 #[agent(name = "adb.effects.retry")]
 #[derive(Serialize, Deserialize)]
 pub struct Retry {
@@ -60,6 +61,7 @@ pub struct Retry {
 }
 
 impl Retry {
+    /// Returns true if the agent should delete itself
     async fn trigger(
         &mut self,
         ref_: AgentRef<Self>,
@@ -70,13 +72,14 @@ impl Retry {
         // Check max attempts
         if let Some(max_attempts) = self.config.max_attempts {
             if attempt >= max_attempts {
+                // Max attempts reached, send a failure response and
+                // delete ourselves.
                 context.dyn_send(
                     self.config.caller,
                     Box::new(EffectFailure {
                         ref_: ref_.into(),
                         reason: EffectFailureReason::MaxAttemptsExceeded,
                     }),
-                    Timestamp::zero(),
                 )?;
                 return Ok(true);
             }
@@ -84,7 +87,7 @@ impl Retry {
 
         // Schedule next retry
         let delay = self.config.backoff.calculate_delay(attempt);
-        context.send(ref_, TriggerRetry, Timestamp::now() + delay)?;
+        context.send_at(ref_, TriggerRetry, Timestamp::now() + delay)?;
 
         // Register callback
         let callback = self.config.callback.clone();
@@ -101,6 +104,7 @@ impl Retry {
     }
 }
 
+// Message to construct a retry agent
 #[message(name = "adb.effects.retry.do")]
 #[derive(Serialize, Deserialize)]
 pub struct DoRetry {
@@ -153,7 +157,7 @@ impl Construct for DoRetry {
         } else {
             // If there's an overall timeout then schedule that
             if let Some(timeout) = agent.config.timeout {
-                context.dyn_send(
+                context.dyn_send_at(
                     ref_.into(),
                     Box::new(EffectFailure {
                         ref_: ref_.into(),
@@ -192,7 +196,7 @@ impl HandleDyn for Retry {
         message: DynMessage,
         context: &mut Context,
     ) -> Result<bool, Error> {
-        context.dyn_send(self.config.caller, message, Timestamp::zero())?;
+        context.dyn_send(self.config.caller, message)?;
         Ok(true)
     }
 }

@@ -50,9 +50,9 @@ async fn main() -> Result<(), Error> {
     let db = Arc::new(Database::default()?);
 
     let mut ctx = ExternalContext::new();
-    let agent_ref = ctx.construct(MY_ROOT, MyMessage, Timestamp::zero())?;
-    ctx.send(agent_ref, MyMessage, Timestamp::zero())?;
-    ctx.send(
+    let agent_ref = ctx.construct(MY_ROOT, MyMessage)?;
+    ctx.send(agent_ref, MyMessage)?;
+    ctx.send_at(
         agent_ref,
         MyMessage,
         Timestamp::now() + Duration::from_secs(5),

@@ -52,6 +52,28 @@ namespace AgentdbAdmin
             }
         }
 
+        public class ListAgentsPageId : PageId
+        {
+            public List<byte> Root { get; set; }
+            public override string Title => Utils.StringifyBytes(Root) + ": Agent list";
+
+            public override IViewTab CreateTab(ConnectionTab parent, AgentdbAdmin.IOpaqueHandle connectionHandle)
+            {
+                return new AgentListViewTab(parent, connectionHandle, Root);
+            }
+
+            public override bool Equals(object obj)
+            {
+                return obj is ListAgentsPageId id &&
+                       EqualityComparer<List<byte>>.Default.Equals(Root, id.Root);
+            }
+
+            public override int GetHashCode()
+            {
+                return -1490287827 + EqualityComparer<List<byte>>.Default.GetHashCode(Root);
+            }
+        }
+
         public class BlobPageId : PageId
         {
             public List<byte> Root { get; set; }
@@ -83,6 +105,8 @@ namespace AgentdbAdmin
         public MainForm MainForm { get; set; }
         private AgentdbAdmin.IOpaqueHandle connectionHandle;
         private Dictionary<PageId, TabPage> tabPages = new Dictionary<PageId, TabPage>();
+        private List<TabPage> tabHistory = new List<TabPage>();
+        private bool closingTab = false;
 
         public ConnectionTab(MainForm parent, AgentdbAdmin.IOpaqueHandle connectionHandle)
         {
@@ -90,6 +114,7 @@ namespace AgentdbAdmin
             this.connectionHandle = connectionHandle;
             this.Dock = DockStyle.Fill;
             InitializeComponent();
+            tabHistory.Add(homePage);
         }
         public async void PerformRefresh()
         {
@@ -171,6 +196,8 @@ namespace AgentdbAdmin
         private void tabControl_SelectedIndexChanged(object sender, EventArgs e)
         {
             closeTabButton.Visible = tabControl.SelectedTab != null && tabControl.SelectedTab != homePage;
+            tabHistory.Remove(tabControl.SelectedTab);
+            tabHistory.Add(tabControl.SelectedTab);
         }
 
         private void closeTabButton_Click(object sender, EventArgs e)
@@ -178,8 +205,26 @@ namespace AgentdbAdmin
             var pageId = tabControl.SelectedTab?.Tag as PageId;
             if (pageId != null)
             {
+                tabHistory.Remove(tabControl.SelectedTab);
                 tabPages.Remove(pageId);
+                var desiredTab = tabHistory.LastOrDefault();
+                tabControl.SuspendLayout();
+                closingTab = true;
                 tabControl.TabPages.Remove(tabControl.SelectedTab);
+                closingTab = false;
+                if (desiredTab != null)
+                {
+                    tabControl.SelectedTab = desiredTab;
+                }
+                tabControl.ResumeLayout();
+            }
+        }
+
+        private void tabControl_Deselecting(object sender, TabControlCancelEventArgs e)
+        {
+            if (closingTab)
+            {
+                e.Cancel = true;
             }
         }
     }

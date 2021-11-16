@@ -1,7 +1,7 @@
 use agentdb_system::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum EffectFailureReason {
     MaxAttemptsExceeded,
     TimedOut,
@@ -13,6 +13,15 @@ pub enum EffectFailureReason {
 pub struct EffectFailure {
     ref_: DynAgentRef,
     reason: EffectFailureReason,
+}
+
+impl EffectFailure {
+    pub fn ref_(&self) -> DynAgentRef {
+        self.ref_
+    }
+    pub fn reason(&self) -> &EffectFailureReason {
+        &self.reason
+    }
 }
 
 pub mod callback;

@@ -16,9 +16,11 @@ mod subspace;
 mod utils;
 
 use cancellation::{spawn_cancellable, CancellableHandle};
+pub use client::USER_SPACE;
 use client::{client_task, PartitionRange};
 pub use error::Error;
 pub use message::send_messages;
+pub use subspace::Subspace;
 pub use utils::Timestamp;
 
 const DEFAULT_PARTITION_RANGE: PartitionRange = PartitionRange {

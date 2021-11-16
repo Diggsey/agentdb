@@ -1,4 +1,7 @@
 use serde::{de::Visitor, Deserialize, Serialize};
+use uuid::Uuid;
+
+use crate::AgentRef;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Root {
@@ -31,6 +34,10 @@ impl Root {
     }
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         Self::from_str(std::str::from_utf8(bytes).ok()?)
+    }
+
+    pub const fn const_ref<A>(self, id: u128) -> AgentRef<A> {
+        AgentRef::from_parts_unchecked(self, Uuid::from_u128(id))
     }
 }
 

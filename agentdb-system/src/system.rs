@@ -19,9 +19,9 @@ async fn system_fn_fallible(input: StateFnInput<'_>) -> Result<StateFnOutput, Er
         None
     };
 
-    let mut context = Context::new(input.tx);
-
     let root = Root::from_bytes(input.root).ok_or_else(|| Error(anyhow!("Unknown root")))?;
+    let mut context = Context::new(input.tx, root);
+
     let agent_ref = DynAgentRef { id: input.id, root };
 
     for msg_bytes in input.messages {

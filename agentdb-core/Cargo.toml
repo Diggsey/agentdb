@@ -12,7 +12,6 @@ tokio = { version = "1.11.0", features = ["full"] }
 anyhow = "1.0.43"
 futures = "0.3.17"
 uuid = { version = "0.8.2", features = ["v4", "serde"] }
-tupleops = { version = "0.1.1", features = ["concat"] }
 byteorder = "1.4.3"
 chrono = { version = "0.4.19", features = ["serde"] }
 log = "0.4.14"

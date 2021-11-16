@@ -34,7 +34,7 @@ namespace AgentdbAdmin
             blobData = (await parent.MainForm.PerformAsync<List<byte>>("Loading blob", continuation =>
             {
                 AgentdbAdmin.LoadBlob(connectionHandle, root, blobId, continuation);
-            })).ToArray();
+            }))?.ToArray();
             SuspendLayout();
             if (blobData == null)
             {

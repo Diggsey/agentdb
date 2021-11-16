@@ -59,6 +59,15 @@ pub struct ClientDesc {
     partitions: Range<u32>,
 }
 
+#[derive(Net)]
+pub struct NoResult;
+
+impl From<()> for NoResult {
+    fn from(_: ()) -> Self {
+        Self
+    }
+}
+
 impl From<admin::ClientDesc> for ClientDesc {
     fn from(other: admin::ClientDesc) -> Self {
         Self {
@@ -177,5 +186,33 @@ fn load_blob(
                 TransactOption::idempotent(),
             )
             .await
+    });
+}
+
+#[net]
+fn change_partitions(
+    con: Arc<Connection>,
+    root: Vec<u8>,
+    partition_range: Range<u32>,
+    continuation: Continuation<NoResult>,
+) {
+    wrap_async(continuation, async move {
+        admin::change_partitions(con.db.clone(), &root, partition_range)
+            .await
+            .map(Into::into)
+    });
+}
+
+#[net]
+fn list_agents(
+    con: Arc<Connection>,
+    root: Vec<u8>,
+    from: Uuid,
+    limit: u32,
+    reverse: bool,
+    continuation: Continuation<Vec<Uuid>>,
+) {
+    wrap_async(continuation, async move {
+        admin::list_agents(con.db.clone(), &root, from, limit as usize, reverse).await
     });
 }

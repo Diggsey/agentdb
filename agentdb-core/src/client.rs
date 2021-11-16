@@ -11,11 +11,13 @@ use crate::subspace::Subspace;
 use crate::utils::load_partition_range;
 use crate::{Error, StateFn, Timestamp, HEARTBEAT_INTERVAL};
 
-pub static MAGIC: Subspace<()> = Subspace::new(b"agentdb");
+pub static MAGIC: Subspace<()> = Subspace::new(b"!agentdb");
 pub static CLIENT_SPACE: Subspace<(Uuid,)> = Subspace::new(b"c");
+pub static AGENT_SPACE: Subspace<(Uuid,)> = Subspace::new(b"a");
 pub static PARTITION_COUNT: Subspace<()> = Subspace::new(b"pc");
 pub static PARTITION_COUNT_SEND: Subspace<()> = PARTITION_COUNT.subspace(b"s");
 pub static PARTITION_COUNT_RECV: Subspace<()> = PARTITION_COUNT.subspace(b"r");
+pub static USER_SPACE: Subspace<(Uuid,)> = Subspace::new(b"u");
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub struct PartitionAssignment {
@@ -84,17 +86,16 @@ impl ClientState {
             last_active_ts: current_ts,
             name: self.name.clone(),
         };
+        let client_bytes = postcard::to_stdvec(&client_value).expect("Infallible serialization");
         self.db
             .transact_boxed(
-                (),
-                |tx, ()| {
-                    let client_key = self.client_key.clone();
-                    let client_bytes =
-                        postcard::to_stdvec(&client_value).expect("Infallible serialization");
-                    Box::pin(async move {
-                        tx.set(&client_key, &client_bytes);
+                (&self.client_key, client_bytes),
+                |tx, &mut (client_key, ref client_bytes)| {
+                    async move {
+                        tx.set(client_key, client_bytes);
                         Ok::<_, FdbError>(())
-                    })
+                    }
+                    .boxed()
                 },
                 TransactOption::idempotent(),
             )
@@ -105,14 +106,11 @@ impl ClientState {
         let new_partition_assignment = self
             .db
             .transact_boxed(
-                (),
-                |tx, ()| {
-                    let root = self.root.clone();
-                    let client_range = self.client_range.clone();
-                    let client_key = self.client_key.clone();
-                    Box::pin(async move {
+                (&self.root, &self.client_range, &self.client_key),
+                |tx, &mut (root, client_range, client_key)| {
+                    async move {
                         // Scan for all the active clients
-                        let mut kv_stream = tx.get_ranges(client_range, true);
+                        let mut kv_stream = tx.get_ranges(client_range.clone(), true);
                         let mut client_count = 0;
                         let mut client_index = 0;
                         while let Some(kvs) = kv_stream.try_next().await? {
@@ -134,7 +132,7 @@ impl ClientState {
 
                         // Read the partition count
                         let partition_range =
-                            load_partition_range(tx, &root, &PARTITION_COUNT_RECV).await?;
+                            load_partition_range(tx, &root, &PARTITION_COUNT_RECV, true).await?;
 
                         // Return the new partition assignment
                         Ok::<_, FdbError>(PartitionAssignment {
@@ -142,7 +140,8 @@ impl ClientState {
                             client_index,
                             client_count,
                         })
-                    })
+                    }
+                    .boxed()
                 },
                 TransactOption::idempotent(),
             )
@@ -182,13 +181,12 @@ pub async fn client_task(
     state_fn: StateFn,
     mut cancellation: Cancellation,
 ) -> Result<(), Error> {
+    let magic_key = MAGIC.key(&root, ());
     db.transact_boxed(
-        (),
-        |tx, ()| {
-            let magic_key = MAGIC.key(&root, ());
-
+        &magic_key,
+        |tx, &mut magic_key| {
             async move {
-                tx.set(&magic_key, b"agentdb");
+                tx.set(magic_key, b"agentdb");
                 Ok::<_, FdbError>(())
             }
             .boxed()

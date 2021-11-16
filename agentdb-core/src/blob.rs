@@ -21,11 +21,11 @@ pub async fn load(
     blob_id: Uuid,
     snapshot: bool,
 ) -> Result<Option<Vec<u8>>, Error> {
-    let range = BLOB_SPACE.range::<_, (u32,)>(root, (blob_id,)).into();
+    let range = BLOB_SPACE.range(root, (blob_id,)).into();
 
     // Only look at the modified key for potential conflicts, not the entire blob
     if !snapshot {
-        let modified_range = BLOB_MODIFIED_SPACE.range::<_, ()>(root, (blob_id,));
+        let modified_range = BLOB_MODIFIED_SPACE.range(root, (blob_id,));
         tx.add_conflict_range(
             &modified_range.0,
             &modified_range.1,
@@ -51,7 +51,7 @@ pub async fn load(
 
 pub fn store(tx: &Transaction, root: &[u8], blob_id: Uuid, data: &[u8]) {
     let modified_key = BLOB_MODIFIED_SPACE.key(root, (blob_id,));
-    let range = BLOB_SPACE.range::<_, (u32,)>(root, (blob_id,));
+    let range = BLOB_SPACE.range(root, (blob_id,));
 
     tx.atomic_op(
         &modified_key,
@@ -67,7 +67,7 @@ pub fn store(tx: &Transaction, root: &[u8], blob_id: Uuid, data: &[u8]) {
 
 pub fn delete(tx: &Transaction, root: &[u8], blob_id: Uuid) {
     let modified_key = BLOB_MODIFIED_SPACE.key(root, (blob_id,));
-    let range = BLOB_SPACE.range::<_, (u32,)>(root, (blob_id,));
+    let range = BLOB_SPACE.range(root, (blob_id,));
     tx.clear(&modified_key);
     tx.clear_range(&range.0, &range.1);
 }

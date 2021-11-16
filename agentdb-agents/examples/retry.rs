@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use agentdb_agents::effects::EffectFailure;
 use foundationdb::Database;
 use serde::{Deserialize, Serialize};
 
@@ -8,7 +9,7 @@ use agentdb_agents::effects::retry::DoRetry;
 use agentdb_system::*;
 use tokio::io::AsyncReadExt;
 
-declare_root!("my_root" => MY_ROOT);
+declare_root!("example_retry" => MY_ROOT);
 
 #[derive(Serialize, Deserialize)]
 struct MyEffect;
@@ -44,7 +45,10 @@ impl Construct for MyConstructor {
         ref_: AgentRef<MyAgent>,
         context: &mut Context<'_>,
     ) -> Result<Option<MyAgent>, Error> {
-        context.construct(MY_ROOT, DoRetry::new(ref_, MyEffect), Timestamp::zero())?;
+        context.construct(
+            MY_ROOT,
+            DoRetry::new(ref_, MyEffect).with_max_attempts(Some(3)),
+        )?;
         Ok(Some(MyAgent))
     }
 }
@@ -62,6 +66,19 @@ impl Handle<MyMessage> for MyAgent {
     }
 }
 
+#[handler]
+impl Handle<EffectFailure> for MyAgent {
+    async fn handle(
+        &mut self,
+        _ref_: AgentRef<Self>,
+        message: EffectFailure,
+        _context: &mut Context,
+    ) -> Result<bool, Error> {
+        println!("Failed to get a response! ({:?})", message.reason());
+        Ok(false)
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let _ = dotenv::dotenv();
@@ -72,7 +89,7 @@ async fn main() -> Result<(), Error> {
     let db = Arc::new(Database::default()?);
 
     let mut ctx = ExternalContext::new();
-    ctx.construct(MY_ROOT, MyConstructor, Timestamp::zero())?;
+    ctx.construct(MY_ROOT, MyConstructor)?;
     ctx.run_with_db(&db).await?;
 
     run(default_client_name(), db, MY_ROOT).await
