@@ -1,6 +1,6 @@
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
-use foundationdb::Database;
+use agentdb_core::Global;
 use serde::{Deserialize, Serialize};
 
 use agentdb_system::*;
@@ -47,7 +47,7 @@ async fn main() -> Result<(), Error> {
 
     let _network = unsafe { foundationdb::boot() };
 
-    let db = Arc::new(Database::default()?);
+    let global = Global::connect(None)?;
 
     let mut ctx = ExternalContext::new();
     let agent_ref = ctx.construct(MY_ROOT, MyMessage)?;
@@ -57,7 +57,7 @@ async fn main() -> Result<(), Error> {
         MyMessage,
         Timestamp::now() + Duration::from_secs(5),
     )?;
-    ctx.run_with_db(&db).await?;
+    ctx.run(&global).await?;
 
-    run(default_client_name(), db, MY_ROOT).await
+    run(default_client_name(), global, MY_ROOT).await
 }

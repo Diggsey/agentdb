@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
-use agentdb_core::{MessageToSend, StateFnInput, StateFnOutput, Timestamp};
-use foundationdb::{Database, TransactOption};
+use agentdb_core::{Global, MessageToSend, StateFnInput, StateFnOutput, Timestamp};
+use foundationdb::TransactOption;
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-static ROOT: &[u8] = b"app";
+static ROOT: &str = "app";
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct HelloAgent {
@@ -51,15 +51,17 @@ async fn state_fn(input: StateFnInput<'_>) -> Result<StateFnOutput, ()> {
     })
 }
 
-async fn say_hello(db: &Database, id: Uuid, from: &str) -> anyhow::Result<()> {
-    Ok(db
+async fn say_hello(global: &Global, id: Uuid, from: &str) -> anyhow::Result<()> {
+    Ok(global
+        .db()
         .transact_boxed(
-            (),
-            |tx, _| {
+            global,
+            |tx, &mut global| {
                 let content = postcard::to_stdvec(&Message::Hello(from.to_string())).unwrap();
                 async move {
                     agentdb_core::send_messages(
                         tx,
+                        global,
                         &[MessageToSend {
                             recipient_root: ROOT.into(),
                             recipient_id: id,
@@ -84,19 +86,19 @@ async fn main() -> anyhow::Result<()> {
 
     let _network = unsafe { foundationdb::boot() };
 
-    let db = Arc::new(Database::default()?);
+    let global = Global::connect(None)?;
 
     let agent_id1 = Uuid::new_v4();
     let agent_id2 = Uuid::new_v4();
 
-    say_hello(&db, agent_id1, "John").await?;
-    say_hello(&db, agent_id1, "Jim").await?;
-    say_hello(&db, agent_id2, "Jack").await?;
+    say_hello(&global, agent_id1, "John").await?;
+    say_hello(&global, agent_id1, "Jim").await?;
+    say_hello(&global, agent_id2, "Jack").await?;
 
     agentdb_core::run(
         agentdb_core::default_client_name(),
-        db,
-        ROOT.to_vec(),
+        global,
+        ROOT.into(),
         Arc::new(|input| Box::pin(state_fn(input))),
     )
     .await?;

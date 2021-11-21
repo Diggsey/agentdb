@@ -2,9 +2,9 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
-use agentdb_core::{blob, Error};
+use agentdb_core::{blob, Error, Global};
 use anyhow::anyhow;
-use foundationdb::{Database, TransactOption, Transaction};
+use foundationdb::{TransactOption, Transaction};
 use futures::{Future, FutureExt, Stream, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -35,30 +35,41 @@ impl DynAgentRef {
     pub fn id(self) -> Uuid {
         self.id
     }
-    pub async fn load(self, tx: &Transaction, snapshot: bool) -> Result<Option<DynAgent>, Error> {
-        let maybe_blob = blob::load(tx, self.root.as_bytes(), self.id, snapshot).await?;
+    pub async fn load_tx(
+        self,
+        global: &Global,
+        tx: &Transaction,
+        snapshot: bool,
+    ) -> Result<Option<DynAgent>, Error> {
+        let maybe_blob = blob::load(tx, global, self.root.as_str(), self.id, snapshot).await?;
         Ok(if let Some(state) = maybe_blob {
             Some(DefaultSerializer.deserialize::<DynAgent>(&state)?)
         } else {
             None
         })
     }
-    pub async fn load_with_db(self, db: &Database) -> Result<Option<DynAgent>, Error> {
-        db.transact_boxed(
-            (),
-            |tx, ()| self.load(tx, true).boxed(),
-            TransactOption::idempotent(),
-        )
-        .await
+    pub async fn load(self, global: &Global) -> Result<Option<DynAgent>, Error> {
+        global
+            .db()
+            .transact_boxed(
+                global,
+                |tx, global| self.load_tx(global, tx, true).boxed(),
+                TransactOption::idempotent(),
+            )
+            .await
     }
-    pub fn watch(self, tx: &Transaction) -> impl Future<Output = Result<(), Error>> + 'static {
-        blob::watch(tx, self.root.as_bytes(), self.id)
+    pub async fn watch(
+        self,
+        global: &Global,
+        tx: &Transaction,
+    ) -> Result<impl Future<Output = Result<(), Error>> + 'static, Error> {
+        blob::watch(tx, global, self.root.as_str(), self.id).await
     }
     pub fn watch_stream(
         self,
-        db: Arc<Database>,
+        global: Arc<Global>,
     ) -> impl Stream<Item = Result<Option<DynAgent>, Error>> + 'static {
-        blob::watch_stream(db, self.root.as_bytes(), self.id).and_then(|maybe_blob| async move {
+        blob::watch_stream(global, self.root.as_str(), self.id).and_then(|maybe_blob| async move {
             Ok(if let Some(state) = maybe_blob {
                 Some(DefaultSerializer.deserialize::<DynAgent>(&state)?)
             } else {
@@ -143,21 +154,30 @@ impl<A: Agent> AgentRef<A> {
             None
         })
     }
-    pub async fn load(self, tx: &Transaction, snapshot: bool) -> Result<Option<A>, Error> {
-        Self::downcast_state(self.inner.load(tx, snapshot).await?)
+    pub async fn load_tx(
+        self,
+        global: &Global,
+        tx: &Transaction,
+        snapshot: bool,
+    ) -> Result<Option<A>, Error> {
+        Self::downcast_state(self.inner.load_tx(global, tx, snapshot).await?)
     }
-    pub async fn load_with_db(self, db: &Database) -> Result<Option<A>, Error> {
-        Self::downcast_state(self.inner.load_with_db(db).await?)
+    pub async fn load(self, global: &Global) -> Result<Option<A>, Error> {
+        Self::downcast_state(self.inner.load(global).await?)
     }
-    pub fn watch(self, tx: &Transaction) -> impl Future<Output = Result<(), Error>> + 'static {
-        self.inner.watch(tx)
+    pub async fn watch(
+        self,
+        global: &Global,
+        tx: &Transaction,
+    ) -> Result<impl Future<Output = Result<(), Error>> + 'static, Error> {
+        self.inner.watch(global, tx).await
     }
     pub fn watch_stream(
         self,
-        db: Arc<Database>,
+        global: Arc<Global>,
     ) -> impl Stream<Item = Result<Option<A>, Error>> + 'static {
         self.inner
-            .watch_stream(db)
+            .watch_stream(global)
             .and_then(|maybe_agent| async move { Self::downcast_state(maybe_agent) })
     }
 }

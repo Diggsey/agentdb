@@ -1,6 +1,9 @@
 use std::{fmt::Debug, sync::Arc, time::Duration};
 
-use foundationdb::{Database, Transaction};
+use foundationdb::{
+    directory::{Directory, DirectoryOutput},
+    Transaction,
+};
 use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -9,6 +12,7 @@ pub mod admin;
 pub mod blob;
 pub mod cancellation;
 mod client;
+mod directories;
 mod error;
 mod message;
 mod partition;
@@ -16,8 +20,8 @@ mod subspace;
 mod utils;
 
 use cancellation::{spawn_cancellable, CancellableHandle};
-pub use client::USER_SPACE;
 use client::{client_task, PartitionRange};
+pub use directories::{Global, TypedSubspace};
 pub use error::Error;
 pub use message::send_messages;
 pub use subspace::Subspace;
@@ -39,16 +43,26 @@ struct MessageHeader {
 
 #[derive(Debug)]
 pub struct StateFnInput<'a> {
-    pub root: &'a [u8],
+    user_dir: &'a DirectoryOutput,
+    pub root: &'a str,
     pub tx: &'a Transaction,
     pub id: Uuid,
     pub state: Option<Vec<u8>>,
     pub messages: Vec<Vec<u8>>,
 }
 
+impl<'a> StateFnInput<'a> {
+    pub async fn user_dir(&self) -> Result<DirectoryOutput, Error> {
+        self.user_dir
+            .create_or_open(self.tx, vec![self.id.to_string()], None, None)
+            .await
+            .map_err(Error::from_dir)
+    }
+}
+
 #[derive(Debug)]
 pub struct MessageToSend {
-    pub recipient_root: Vec<u8>,
+    pub recipient_root: String,
     pub recipient_id: Uuid,
     pub when: Timestamp,
     pub content: Vec<u8>,
@@ -56,12 +70,12 @@ pub struct MessageToSend {
 
 #[derive(Clone)]
 pub struct HookContext {
-    db: Arc<Database>,
+    global: Arc<Global>,
 }
 
 impl HookContext {
-    pub fn db(&self) -> Arc<Database> {
-        self.db.clone()
+    pub fn global(&self) -> &Arc<Global> {
+        &self.global
     }
 }
 
@@ -78,20 +92,20 @@ pub type StateFn =
 
 pub fn start(
     client_name: String,
-    db: Arc<Database>,
-    root: Vec<u8>,
+    global: Arc<Global>,
+    root: String,
     state_fn: StateFn,
 ) -> CancellableHandle<Result<(), Error>> {
-    spawn_cancellable(|c| client_task(client_name, db, root, state_fn, c))
+    spawn_cancellable(|c| client_task(client_name, global, root, state_fn, c))
 }
 
 pub async fn run(
     client_name: String,
-    db: Arc<Database>,
-    root: Vec<u8>,
+    global: Arc<Global>,
+    root: String,
     state_fn: StateFn,
 ) -> Result<(), Error> {
-    start(client_name, db, root, state_fn).await?
+    start(client_name, global, root, state_fn).await?
 }
 
 pub fn default_client_name() -> String {

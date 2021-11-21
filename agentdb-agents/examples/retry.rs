@@ -1,7 +1,4 @@
-use std::sync::Arc;
-
 use agentdb_agents::effects::EffectFailure;
-use foundationdb::Database;
 use serde::{Deserialize, Serialize};
 
 use agentdb_agents::effects::callback::{EffectCallback, EffectContext};
@@ -86,11 +83,11 @@ async fn main() -> Result<(), Error> {
 
     let _network = unsafe { foundationdb::boot() };
 
-    let db = Arc::new(Database::default()?);
+    let global = Global::connect(None)?;
 
     let mut ctx = ExternalContext::new();
     ctx.construct(MY_ROOT, MyConstructor)?;
-    ctx.run_with_db(&db).await?;
+    ctx.run(&global).await?;
 
-    run(default_client_name(), db, MY_ROOT).await
+    run(default_client_name(), global, MY_ROOT).await
 }

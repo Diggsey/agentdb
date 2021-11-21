@@ -2,33 +2,34 @@ use std::sync::Arc;
 
 use foundationdb::{
     options::{ConflictRangeType, MutationType},
-    Database, TransactOption, Transaction,
+    TransactOption, Transaction,
 };
 use futures::{stream, Future, FutureExt, Stream, TryFutureExt, TryStreamExt};
 use uuid::Uuid;
 
-use crate::{error::Error, subspace::Subspace};
-
-static BLOB_SPACE: Subspace<(Uuid, u32)> = Subspace::new(b"b");
-static BLOB_MODIFIED_SPACE: Subspace<(Uuid,)> = Subspace::new(b"bv");
+use crate::{
+    directories::{Global, RootSpace},
+    error::Error,
+    utils::next_key,
+};
 
 // Store blobs in blocks of 16kb to avoid hitting value size limits (typically 100kb)
 const BLOB_STRIPE_SIZE: usize = 1024 * 16;
 
-pub async fn load(
+pub(crate) async fn load_internal(
     tx: &Transaction,
-    root: &[u8],
+    root: &RootSpace,
     blob_id: Uuid,
     snapshot: bool,
 ) -> Result<Option<Vec<u8>>, Error> {
-    let range = BLOB_SPACE.range(root, (blob_id,)).into();
+    let range = root.blob_data.nested_range(&(blob_id,)).into();
 
     // Only look at the modified key for potential conflicts, not the entire blob
     if !snapshot {
-        let modified_range = BLOB_MODIFIED_SPACE.range(root, (blob_id,));
+        let modified_range = root.blob_modified.pack(&blob_id);
         tx.add_conflict_range(
-            &modified_range.0,
-            &modified_range.1,
+            &modified_range,
+            &next_key(&modified_range),
             ConflictRangeType::Read,
         )?;
     }
@@ -49,9 +50,9 @@ pub async fn load(
     }
 }
 
-pub fn store(tx: &Transaction, root: &[u8], blob_id: Uuid, data: &[u8]) {
-    let modified_key = BLOB_MODIFIED_SPACE.key(root, (blob_id,));
-    let range = BLOB_SPACE.range(root, (blob_id,));
+pub(crate) fn store_internal(tx: &Transaction, root: &RootSpace, blob_id: Uuid, data: &[u8]) {
+    let modified_key = root.blob_modified.pack(&blob_id);
+    let range = root.blob_data.nested_range(&(blob_id,));
 
     tx.atomic_op(
         &modified_key,
@@ -60,55 +61,112 @@ pub fn store(tx: &Transaction, root: &[u8], blob_id: Uuid, data: &[u8]) {
     );
     tx.clear_range(&range.0, &range.1);
     for (index, chunk) in data.chunks(BLOB_STRIPE_SIZE).enumerate() {
-        let key = BLOB_SPACE.key(root, (blob_id, index as u32));
+        let key = root.blob_data.pack(&(blob_id, index as u32));
         tx.set(&key, chunk);
     }
 }
 
-pub fn delete(tx: &Transaction, root: &[u8], blob_id: Uuid) {
-    let modified_key = BLOB_MODIFIED_SPACE.key(root, (blob_id,));
-    let range = BLOB_SPACE.range(root, (blob_id,));
+pub(crate) fn delete_internal(tx: &Transaction, root: &RootSpace, blob_id: Uuid) {
+    let modified_key = root.blob_modified.pack(&blob_id);
+    let range = root.blob_data.nested_range(&(blob_id,));
     tx.clear(&modified_key);
     tx.clear_range(&range.0, &range.1);
 }
 
-pub fn watch(
+pub(crate) fn watch_internal(
     tx: &Transaction,
-    root: &[u8],
+    root: &RootSpace,
     blob_id: Uuid,
 ) -> impl Future<Output = Result<(), Error>> + 'static {
-    let modified_key = BLOB_MODIFIED_SPACE.key(root, (blob_id,));
+    let modified_key = root.blob_modified.pack(&blob_id);
     tx.watch(&modified_key).err_into()
 }
 
-pub fn watch_stream(
-    db: Arc<Database>,
-    root: &[u8],
+pub(crate) fn watch_stream_internal(
+    global: Arc<Global>,
+    root: Arc<RootSpace>,
     blob_id: Uuid,
 ) -> impl Stream<Item = Result<Option<Vec<u8>>, Error>> + 'static {
-    let root = Arc::new(root.to_vec());
     stream::try_unfold(None, move |maybe_fut| {
         let root = root.clone();
-        let db = db.clone();
+        let global = global.clone();
         async move {
             if let Some(fut) = maybe_fut {
                 fut.await?;
             }
             Ok::<_, Error>(Some(
-                db.transact_boxed(
-                    root,
-                    move |tx, root| {
-                        async move {
-                            let blob = load(tx, &root, blob_id, true).await?;
-                            let fut = watch(tx, &root, blob_id);
-                            Ok::<_, Error>((blob, Some(fut)))
-                        }
-                        .boxed()
-                    },
-                    TransactOption::idempotent(),
-                )
-                .await?,
+                global
+                    .db()
+                    .transact_boxed(
+                        root,
+                        move |tx, root| {
+                            async move {
+                                let blob = load_internal(tx, &root, blob_id, true).await?;
+                                let fut = watch_internal(tx, &root, blob_id);
+                                Ok::<_, Error>((blob, Some(fut)))
+                            }
+                            .boxed()
+                        },
+                        TransactOption::idempotent(),
+                    )
+                    .await?,
             ))
         }
     })
+}
+
+pub async fn load(
+    tx: &Transaction,
+    global: &Global,
+    root: &str,
+    blob_id: Uuid,
+    snapshot: bool,
+) -> Result<Option<Vec<u8>>, Error> {
+    let root = global.root(root).await?;
+    load_internal(tx, &root, blob_id, snapshot).await
+}
+
+pub async fn store(
+    tx: &Transaction,
+    global: &Global,
+    root: &str,
+    blob_id: Uuid,
+    data: &[u8],
+) -> Result<(), Error> {
+    let root = global.root(root).await?;
+    store_internal(tx, &root, blob_id, data);
+    Ok(())
+}
+
+pub async fn delete(
+    tx: &Transaction,
+    global: &Global,
+    root: &str,
+    blob_id: Uuid,
+) -> Result<(), Error> {
+    let root = global.root(root).await?;
+    delete_internal(tx, &root, blob_id);
+    Ok(())
+}
+
+pub async fn watch(
+    tx: &Transaction,
+    global: &Global,
+    root: &str,
+    blob_id: Uuid,
+) -> Result<impl Future<Output = Result<(), Error>> + 'static, Error> {
+    let root = global.root(root).await?;
+    Ok(watch_internal(tx, &root, blob_id))
+}
+
+pub fn watch_stream(
+    global: Arc<Global>,
+    root: &str,
+    blob_id: Uuid,
+) -> impl Stream<Item = Result<Option<Vec<u8>>, Error>> + 'static {
+    let root = root.to_owned();
+    let global2 = global.clone();
+    async move { global2.root(&root).await }
+        .map_ok(move |root| watch_stream_internal(global, root, blob_id))
+        .try_flatten_stream()
 }

@@ -8,13 +8,28 @@ use uuid::Uuid;
 
 use crate::Notify;
 
-pub static INDEX_SPACE: Subspace<(Uuid, Vec<u8>, Vec<u8>, Uuid)> = USER_SPACE.subspace(b"");
+type IndexSpace = TypedSubspace<(Vec<u8>, String, Uuid)>;
 
 // Effect agent which will automatically retry a callback
 #[agent(name = "adb.data_models.agent_index")]
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct AgentIndex {
     count: u64,
+    index_space: IndexSpace,
+}
+
+impl AgentIndex {
+    pub async fn new(context: &mut Context<'_>) -> Result<Self, Error> {
+        Ok(Self {
+            count: 0,
+            index_space: TypedSubspace::open_or_create(
+                context.tx(),
+                &context.user_dir().await?,
+                "idx",
+            )
+            .await?,
+        })
+    }
 }
 
 /// Obtain high-level information about the index
@@ -103,20 +118,19 @@ pub struct QueryRangeSelector {
 }
 
 impl QueryRangeSelector {
-    fn index_key(
-        selector: Option<Self>,
-        ref_: AgentRef<AgentIndex>,
-        root: Root,
-        is_upper: bool,
-    ) -> Vec<u8> {
-        if let Some(selector) = selector {
-            INDEX_SPACE.build(
-                root.as_bytes(),
-                (ref_.id(), selector.key),
-                is_upper == selector.inclusive,
+    fn index_key(selector: Option<Self>, space: &IndexSpace, is_upper_bound: bool) -> Vec<u8> {
+        let ((from, to), use_to) = if let Some(selector) = selector {
+            (
+                space.nested_range(&(selector.key,)),
+                selector.inclusive == is_upper_bound,
             )
         } else {
-            INDEX_SPACE.build(root.as_bytes(), (ref_.id(),), is_upper)
+            (space.range(), is_upper_bound)
+        };
+        if use_to {
+            to
+        } else {
+            from
         }
     }
 }
@@ -142,17 +156,9 @@ pub struct QueryRangeResponse {
 }
 
 impl AgentIndex {
-    fn index_key(
-        &self,
-        ref_: AgentRef<Self>,
-        root: Root,
-        key: Vec<u8>,
-        value: DynAgentRef,
-    ) -> Vec<u8> {
-        INDEX_SPACE.key(
-            root.as_bytes(),
-            (ref_.id(), key, value.root().as_bytes().to_vec(), value.id()),
-        )
+    fn index_key(&self, key: Vec<u8>, value: DynAgentRef) -> Vec<u8> {
+        self.index_space
+            .pack(&(key, value.root().to_string(), value.id()))
     }
 }
 
@@ -165,7 +171,7 @@ impl Construct for Stat {
         ref_: AgentRef<AgentIndex>,
         context: &mut Context<'_>,
     ) -> Result<Option<AgentIndex>, Error> {
-        let mut state = AgentIndex::default();
+        let mut state = AgentIndex::new(context).await?;
         Ok(if state.handle(ref_, self, context).await? {
             None
         } else {
@@ -202,7 +208,7 @@ impl Construct for Update {
         ref_: AgentRef<AgentIndex>,
         context: &mut Context<'_>,
     ) -> Result<Option<AgentIndex>, Error> {
-        let mut state = AgentIndex::default();
+        let mut state = AgentIndex::new(context).await?;
         Ok(if state.handle(ref_, self, context).await? {
             None
         } else {
@@ -215,21 +221,20 @@ impl Construct for Update {
 impl Handle<Update> for AgentIndex {
     async fn handle(
         &mut self,
-        ref_: AgentRef<Self>,
+        _ref_: AgentRef<Self>,
         mut msg: Update,
         context: &mut Context,
     ) -> Result<bool, Error> {
-        let root = context.root();
         let tx = context.tx();
         for op in msg.ops {
             match op {
                 UpdateOp::Add { key, value } => {
-                    let index_key = self.index_key(ref_, root, key, value);
+                    let index_key = self.index_key(key, value);
                     tx.atomic_op(&index_key, &1i64.to_le_bytes(), MutationType::Add);
                     self.count += 1;
                 }
                 UpdateOp::Remove { key, value } => {
-                    let index_key = self.index_key(ref_, root, key, value);
+                    let index_key = self.index_key(key, value);
                     tx.atomic_op(&index_key, &(-1i64).to_le_bytes(), MutationType::Add);
                     tx.atomic_op(
                         &index_key,
@@ -254,7 +259,7 @@ impl Construct for QueryExact {
         ref_: AgentRef<AgentIndex>,
         context: &mut Context<'_>,
     ) -> Result<Option<AgentIndex>, Error> {
-        let mut state = AgentIndex::default();
+        let mut state = AgentIndex::new(context).await?;
         Ok(if state.handle(ref_, self, context).await? {
             None
         } else {
@@ -267,23 +272,21 @@ impl Construct for QueryExact {
 impl Handle<QueryExact> for AgentIndex {
     async fn handle(
         &mut self,
-        ref_: AgentRef<Self>,
+        _ref_: AgentRef<Self>,
         msg: QueryExact,
         context: &mut Context,
     ) -> Result<bool, Error> {
-        let root = context.root();
         let tx = context.tx();
         let mut res = Vec::with_capacity(msg.keys.len());
         for key in msg.keys {
-            let mut index_range: RangeOption =
-                INDEX_SPACE.range(root.as_bytes(), (ref_.id(), key)).into();
+            let mut index_range: RangeOption = self.index_space.nested_range(&(key,)).into();
             index_range.limit = Some(1);
             index_range.mode = StreamingMode::WantAll;
             let values = tx.get_range(&index_range, 0, true).await?;
             res.push(values.get(0).and_then(|v| {
-                let (_, _, agent_root, agent_id) = INDEX_SPACE.decode(root.as_bytes(), v.key())?;
+                let (_, agent_root, agent_id) = self.index_space.unpack(v.key()).ok()?;
                 Some(DynAgentRef::from_parts(
-                    Root::from_bytes(&agent_root)?,
+                    Root::from_str(&agent_root)?,
                     agent_id,
                 ))
             }));
@@ -308,7 +311,7 @@ impl Construct for QueryRange {
         ref_: AgentRef<AgentIndex>,
         context: &mut Context<'_>,
     ) -> Result<Option<AgentIndex>, Error> {
-        let mut state = AgentIndex::default();
+        let mut state = AgentIndex::new(context).await?;
         Ok(if state.handle(ref_, self, context).await? {
             None
         } else {
@@ -321,15 +324,14 @@ impl Construct for QueryRange {
 impl Handle<QueryRange> for AgentIndex {
     async fn handle(
         &mut self,
-        ref_: AgentRef<Self>,
+        _ref_: AgentRef<Self>,
         msg: QueryRange,
         context: &mut Context,
     ) -> Result<bool, Error> {
-        let root = context.root();
         let tx = context.tx();
         let mut index_range: RangeOption =
-            (QueryRangeSelector::index_key(msg.lower, ref_, root, false)
-                ..QueryRangeSelector::index_key(msg.upper, ref_, root, true))
+            (QueryRangeSelector::index_key(msg.lower, &self.index_space, false)
+                ..QueryRangeSelector::index_key(msg.upper, &self.index_space, true))
                 .into();
 
         index_range.limit = Some(msg.limit as usize);
@@ -338,11 +340,10 @@ impl Handle<QueryRange> for AgentIndex {
         let res = values
             .into_iter()
             .flat_map(|v| {
-                let (_, key, agent_root, agent_id) =
-                    INDEX_SPACE.decode(root.as_bytes(), v.key())?;
+                let (key, agent_root, agent_id) = self.index_space.unpack(v.key()).ok()?;
                 Some((
                     key,
-                    DynAgentRef::from_parts(Root::from_bytes(&agent_root)?, agent_id),
+                    DynAgentRef::from_parts(Root::from_str(&agent_root)?, agent_id),
                 ))
             })
             .collect();

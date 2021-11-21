@@ -3,9 +3,26 @@ use std::{
     fmt::{Debug, Display},
 };
 
-use foundationdb::FdbError;
+use anyhow::anyhow;
+use foundationdb::{directory::error::DirectoryError, FdbError, TransactError};
 
 pub struct Error(pub anyhow::Error);
+
+impl Error {
+    pub fn from_transact(other: impl TransactError + Debug) -> Self {
+        match other.try_into_fdb_error() {
+            Ok(e) => e.into(),
+            Err(e) => Self(anyhow!("{:?}", e)),
+        }
+    }
+    pub fn from_dir(other: DirectoryError) -> Self {
+        match other {
+            DirectoryError::FdbError(e) => e.into(),
+            DirectoryError::HcaError(e) => Self::from_transact(e),
+            e => Self(anyhow!("{:?}", e)),
+        }
+    }
+}
 
 impl Debug for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

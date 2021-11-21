@@ -1,5 +1,8 @@
-use agentdb_core::{send_messages, Error, HookContext, MessageToSend, Timestamp};
-use foundationdb::{Database, TransactOption, Transaction};
+use agentdb_core::{
+    send_messages, Error, Global, HookContext, MessageToSend, StateFnInput, Timestamp,
+};
+use foundationdb::directory::DirectoryOutput;
+use foundationdb::{TransactOption, Transaction};
 use futures::FutureExt;
 use uuid::Uuid;
 
@@ -13,7 +16,7 @@ use crate::serializer::{DefaultSerializer, Serializer};
 pub type CommitHook = Box<dyn FnOnce(HookContext) + Send + Sync + 'static>;
 
 pub struct Context<'a> {
-    pub(crate) tx: &'a Transaction,
+    pub(crate) input: &'a StateFnInput<'a>,
     pub(crate) root: Root,
     pub(crate) messages: Vec<MessageToSend>,
     pub(crate) commit_hooks: Vec<CommitHook>,
@@ -27,7 +30,7 @@ impl<'a> ContextLike for Context<'a> {
         when: Timestamp,
     ) -> Result<(), Error> {
         self.messages.push(MessageToSend {
-            recipient_root: handle.root().to_bytes(),
+            recipient_root: handle.root().to_string(),
             recipient_id: handle.id(),
             when,
             content: DefaultSerializer.serialize(&message)?,
@@ -37,9 +40,9 @@ impl<'a> ContextLike for Context<'a> {
 }
 
 impl<'a> Context<'a> {
-    pub(crate) fn new(tx: &'a Transaction, root: Root) -> Self {
+    pub(crate) fn new(input: &'a StateFnInput<'a>, root: Root) -> Self {
         Self {
-            tx,
+            input,
             root,
             messages: Vec::new(),
             commit_hooks: Vec::new(),
@@ -53,10 +56,13 @@ impl<'a> Context<'a> {
         self.dyn_run_on_commit(Box::new(f))
     }
     pub fn tx(&self) -> &'a Transaction {
-        self.tx
+        self.input.tx
     }
     pub fn root(&self) -> Root {
         self.root
+    }
+    pub async fn user_dir(&self) -> Result<DirectoryOutput, Error> {
+        self.input.user_dir().await
     }
 }
 
@@ -73,7 +79,7 @@ impl ContextLike for ExternalContext {
         when: Timestamp,
     ) -> Result<(), Error> {
         self.messages.push(MessageToSend {
-            recipient_root: handle.root().to_bytes(),
+            recipient_root: handle.root().to_string(),
             recipient_id: handle.id(),
             when,
             content: DefaultSerializer.serialize(&message)?,
@@ -87,19 +93,31 @@ impl ExternalContext {
         Self::default()
     }
 
-    async fn run_internal(&self, tx: &Transaction, user_version: u16) -> Result<(), Error> {
-        send_messages(tx, &self.messages, user_version).await
+    async fn run_internal(
+        &self,
+        global: &Global,
+        tx: &Transaction,
+        user_version: u16,
+    ) -> Result<(), Error> {
+        send_messages(tx, global, &self.messages, user_version).await
     }
-    pub async fn run_with_tx(self, tx: &Transaction, user_version: u16) -> Result<(), Error> {
-        self.run_internal(tx, user_version).await
+    pub async fn run_tx(
+        self,
+        global: &Global,
+        tx: &Transaction,
+        user_version: u16,
+    ) -> Result<(), Error> {
+        self.run_internal(global, tx, user_version).await
     }
-    pub async fn run_with_db(self, db: &Database) -> Result<(), Error> {
-        db.transact_boxed(
-            self,
-            |tx, this| this.run_internal(tx, 0).boxed(),
-            TransactOption::default(),
-        )
-        .await
+    pub async fn run(self, global: &Global) -> Result<(), Error> {
+        global
+            .db()
+            .transact_boxed(
+                (global, self),
+                |tx, &mut (global, ref this)| this.run_internal(global, tx, 0).boxed(),
+                TransactOption::default(),
+            )
+            .await
     }
 }
 

@@ -5,12 +5,16 @@ use std::{
 };
 
 use chrono::{DateTime, TimeZone, Utc};
-use foundationdb::{future::FdbValue, FdbError, RangeOption, Transaction};
-use futures::TryStreamExt;
+use foundationdb::{
+    future::FdbValue,
+    tuple::{TuplePack, TupleUnpack},
+    Database, FdbError, RangeOption, TransactOption, Transaction,
+};
+use futures::{future::BoxFuture, Future, FutureExt, TryStreamExt};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{client::PartitionRange, subspace::Subspace, DEFAULT_PARTITION_RANGE};
+use crate::{client::PartitionRange, Error, DEFAULT_PARTITION_RANGE};
 
 pub fn partition_for_recipient(recipient_id: Uuid, partition_range: PartitionRange) -> u32 {
     let hash = recipient_id.as_u128();
@@ -19,6 +23,41 @@ pub fn partition_for_recipient(recipient_id: Uuid, partition_range: PartitionRan
     (hash % partition_range.count) + partition_range.offset
 }
 
+pub fn next_key(key: &[u8]) -> Vec<u8> {
+    let mut v = Vec::with_capacity(key.len() + 1);
+    v.extend_from_slice(key);
+    v.push(0);
+    v
+}
+
+pub fn move_entries<'trx, D: 'trx + Send + Sync>(
+    db: &'trx Database,
+    data: D,
+    range: RangeOption<'trx>,
+    conv: impl for<'a> FnMut(&'a FdbValue, &'a D) -> BoxFuture<'a, Result<Vec<u8>, Error>> + Send + 'trx,
+) -> impl Future<Output = Result<bool, Error>> + Send + 'trx {
+    db.transact_boxed(
+        (range, conv, data),
+        |tx, (range, conv, data)| {
+            async move {
+                let mut msg_stream = tx.get_ranges(range.clone(), false);
+                let mut more = false;
+                while let Some(batch) = msg_stream.try_next().await? {
+                    more = batch.more();
+                    for item in batch {
+                        tx.clear(item.key());
+                        let new_key = conv(&item, data).await?;
+                        tx.set(&new_key, item.value());
+                    }
+                }
+
+                Ok::<_, Error>(more)
+            }
+            .boxed()
+        },
+        TransactOption::idempotent(),
+    )
+}
 pub async fn get_first_in_range(
     tx: &Transaction,
     mut range: RangeOption<'_>,
@@ -63,12 +102,10 @@ pub fn save_value<T: Serialize>(tx: &Transaction, key: &[u8], value: &T) {
 
 pub async fn load_partition_range(
     tx: &Transaction,
-    root: &[u8],
-    space: &Subspace<()>,
+    key: &[u8],
     snapshot: bool,
 ) -> Result<PartitionRange, FdbError> {
-    let key = space.key(root, ());
-    Ok(load_value(tx, &key, snapshot)
+    Ok(load_value(tx, key, snapshot)
         .await?
         .unwrap_or(DEFAULT_PARTITION_RANGE))
 }
@@ -164,5 +201,24 @@ impl Sub<Timestamp> for Timestamp {
 
     fn sub(self, rhs: Timestamp) -> Self::Output {
         (self.0 - rhs.0).to_std().unwrap_or(Duration::from_secs(0))
+    }
+}
+
+impl TuplePack for Timestamp {
+    fn pack<W: std::io::Write>(
+        &self,
+        w: &mut W,
+        tuple_depth: foundationdb::tuple::TupleDepth,
+    ) -> std::io::Result<foundationdb::tuple::VersionstampOffset> {
+        self.millis().pack(w, tuple_depth)
+    }
+}
+
+impl<'de> TupleUnpack<'de> for Timestamp {
+    fn unpack(
+        input: &'de [u8],
+        tuple_depth: foundationdb::tuple::TupleDepth,
+    ) -> foundationdb::tuple::PackResult<(&'de [u8], Self)> {
+        i64::unpack(input, tuple_depth).map(|(rest, v)| (rest, Self::from_millis(v)))
     }
 }

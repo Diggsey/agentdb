@@ -1,7 +1,4 @@
-use std::sync::Arc;
-
 use agentdb_agents::data_models::agent_index::{self, AgentIndex};
-use foundationdb::Database;
 use serde::{Deserialize, Serialize};
 
 use agentdb_system::*;
@@ -67,7 +64,7 @@ async fn main() -> Result<(), Error> {
 
     let _network = unsafe { foundationdb::boot() };
 
-    let db = Arc::new(Database::default()?);
+    let global = Global::connect(None)?;
 
     let mut ctx = ExternalContext::new();
     for i in 0..100 {
@@ -78,7 +75,7 @@ async fn main() -> Result<(), Error> {
             },
         )?;
     }
-    ctx.run_with_db(&db).await?;
+    ctx.run(&global).await?;
 
-    run(default_client_name(), db, MY_ROOT).await
+    run(default_client_name(), global, MY_ROOT).await
 }

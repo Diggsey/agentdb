@@ -1,23 +1,15 @@
 use std::{collections::BTreeMap, ops::Range, sync::Arc};
 
-use foundationdb::{Database, FdbError, RangeOption, TransactOption};
+use foundationdb::{FdbError, TransactOption};
 use futures::{select, FutureExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::cancellation::{spawn_cancellable, CancellableHandle, Cancellation};
+use crate::directories::{Global, RootSpace};
 use crate::partition::partition_task;
-use crate::subspace::Subspace;
 use crate::utils::load_partition_range;
 use crate::{Error, StateFn, Timestamp, HEARTBEAT_INTERVAL};
-
-pub static MAGIC: Subspace<()> = Subspace::new(b"!agentdb");
-pub static CLIENT_SPACE: Subspace<(Uuid,)> = Subspace::new(b"c");
-pub static AGENT_SPACE: Subspace<(Uuid,)> = Subspace::new(b"a");
-pub static PARTITION_COUNT: Subspace<()> = Subspace::new(b"pc");
-pub static PARTITION_COUNT_SEND: Subspace<()> = PARTITION_COUNT.subspace(b"s");
-pub static PARTITION_COUNT_RECV: Subspace<()> = PARTITION_COUNT.subspace(b"r");
-pub static USER_SPACE: Subspace<(Uuid,)> = Subspace::new(b"u");
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub struct PartitionAssignment {
@@ -37,10 +29,9 @@ impl PartitionAssignment {
 
 struct ClientState {
     name: String,
-    db: Arc<Database>,
-    root: Vec<u8>,
-    client_key: Vec<u8>,
-    client_range: RangeOption<'static>,
+    id: Uuid,
+    global: Arc<Global>,
+    root: Arc<RootSpace>,
     partition_assignment: PartitionAssignment,
     partition_tasks: BTreeMap<u32, CancellableHandle<()>>,
     state_fn: StateFn,
@@ -61,20 +52,19 @@ pub struct ClientValue {
 impl ClientState {
     fn new(
         name: String,
-        db: Arc<Database>,
-        root: Vec<u8>,
+        global: Arc<Global>,
+        root: Arc<RootSpace>,
         client_id: Uuid,
         state_fn: StateFn,
     ) -> Self {
         Self {
             name,
-            db,
-            client_key: CLIENT_SPACE.key(&root, (client_id,)),
-            client_range: CLIENT_SPACE.range(&root, ()).into(),
+            id: client_id,
+            global,
+            root,
             partition_assignment: PartitionAssignment::default(),
             partition_tasks: BTreeMap::new(),
             state_fn,
-            root,
         }
     }
     async fn tick(&mut self) -> Result<(), Error> {
@@ -86,10 +76,12 @@ impl ClientState {
             last_active_ts: current_ts,
             name: self.name.clone(),
         };
+        let client_key = self.root.clients.pack(&self.id);
         let client_bytes = postcard::to_stdvec(&client_value).expect("Infallible serialization");
-        self.db
+        self.global
+            .db()
             .transact_boxed(
-                (&self.client_key, client_bytes),
+                (&client_key, client_bytes),
                 |tx, &mut (client_key, ref client_bytes)| {
                     async move {
                         tx.set(client_key, client_bytes);
@@ -104,13 +96,14 @@ impl ClientState {
         // Check for changed client list
         let expired_ts = current_ts - HEARTBEAT_INTERVAL * 2;
         let new_partition_assignment = self
-            .db
+            .global
+            .db()
             .transact_boxed(
-                (&self.root, &self.client_range, &self.client_key),
-                |tx, &mut (root, client_range, client_key)| {
+                (&self.root, &client_key),
+                |tx, &mut (root, client_key)| {
                     async move {
                         // Scan for all the active clients
-                        let mut kv_stream = tx.get_ranges(client_range.clone(), true);
+                        let mut kv_stream = tx.get_ranges(root.clients.range().into(), true);
                         let mut client_count = 0;
                         let mut client_index = 0;
                         while let Some(kvs) = kv_stream.try_next().await? {
@@ -132,7 +125,7 @@ impl ClientState {
 
                         // Read the partition count
                         let partition_range =
-                            load_partition_range(tx, &root, &PARTITION_COUNT_RECV, true).await?;
+                            load_partition_range(tx, &root.partition_range_recv, true).await?;
 
                         // Return the new partition assignment
                         Ok::<_, FdbError>(PartitionAssignment {
@@ -159,13 +152,11 @@ impl ClientState {
 
             // Start tasks for partitions we now own
             for partition in partition_range {
-                let db = &self.db;
-                let root = &self.root;
-                let state_fn = &self.state_fn;
+                let global = self.global.clone();
+                let root = self.root.clone();
+                let state_fn = self.state_fn.clone();
                 self.partition_tasks.entry(partition).or_insert_with(|| {
-                    spawn_cancellable(|c| {
-                        partition_task(db.clone(), root.clone(), partition, state_fn.clone(), c)
-                    })
+                    spawn_cancellable(|c| partition_task(global, root, partition, state_fn, c))
                 });
             }
         }
@@ -176,27 +167,14 @@ impl ClientState {
 
 pub async fn client_task(
     name: String,
-    db: Arc<Database>,
-    root: Vec<u8>,
+    global: Arc<Global>,
+    root: String,
     state_fn: StateFn,
     mut cancellation: Cancellation,
 ) -> Result<(), Error> {
-    let magic_key = MAGIC.key(&root, ());
-    db.transact_boxed(
-        &magic_key,
-        |tx, &mut magic_key| {
-            async move {
-                tx.set(magic_key, b"agentdb");
-                Ok::<_, FdbError>(())
-            }
-            .boxed()
-        },
-        TransactOption::idempotent(),
-    )
-    .await?;
-
+    let root = global.root(&root).await?;
     let client_id = Uuid::new_v4();
-    let mut client_state = ClientState::new(name, db, root, client_id, state_fn);
+    let mut client_state = ClientState::new(name, global, root, client_id, state_fn);
     let mut interval = tokio::time::interval(HEARTBEAT_INTERVAL);
     log::info!("Starting client...");
 

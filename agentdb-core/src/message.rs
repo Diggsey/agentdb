@@ -5,15 +5,16 @@ use uuid::Uuid;
 
 use crate::{
     blob,
-    client::PARTITION_COUNT_SEND,
+    directories::Global,
     error::Error,
-    partition::{mark_partition_modified, PARTITION_MESSAGE_SPACE},
+    partition::mark_partition_modified,
     utils::{load_partition_range, partition_for_recipient},
     MessageHeader, MessageToSend,
 };
 
 pub async fn send_messages(
     tx: &Transaction,
+    global: &Global,
     msgs: &[MessageToSend],
     user_version: u16,
 ) -> Result<(), Error> {
@@ -21,37 +22,34 @@ pub async fn send_messages(
     let mut partition_modified = HashSet::new();
 
     for (idx, msg) in msgs.into_iter().enumerate() {
+        let recipient_root = global.root(&msg.recipient_root).await?;
         let entry = partition_counts.entry(&msg.recipient_root);
         let partition_range = match entry {
             hash_map::Entry::Occupied(occ) => *occ.get(),
             hash_map::Entry::Vacant(vac) => *vac.insert(
-                load_partition_range(tx, &msg.recipient_root, &PARTITION_COUNT_SEND, false).await?,
+                load_partition_range(tx, &recipient_root.partition_range_send, false).await?,
             ),
         };
 
         let msg_id = Uuid::new_v4();
-        blob::store(tx, &msg.recipient_root, msg_id, &msg.content);
+        blob::store_internal(tx, &recipient_root, msg_id, &msg.content);
         let msg_hdr = postcard::to_stdvec(&MessageHeader {
             recipient_id: msg.recipient_id,
             blob_id: msg_id,
         })?;
 
-        let partition = partition_for_recipient(msg.recipient_id, partition_range);
+        let partition_idx = partition_for_recipient(msg.recipient_id, partition_range);
+        let partition = recipient_root.partition(global, partition_idx).await?;
 
-        let key = PARTITION_MESSAGE_SPACE.key(
-            &msg.recipient_root,
-            (
-                partition,
-                msg.when,
-                Versionstamp::incomplete(user_version),
-                idx as u32,
-            ),
-        );
+        let key =
+            partition
+                .message
+                .pack(&(msg.when, Versionstamp::incomplete(user_version), idx as u32));
         tx.atomic_op(&key, &msg_hdr, MutationType::SetVersionstampedKey);
 
         // Mark the partition as modified
-        if partition_modified.insert((&msg.recipient_root, partition)) {
-            mark_partition_modified(tx, &msg.recipient_root, partition);
+        if partition_modified.insert((&msg.recipient_root, partition_idx)) {
+            mark_partition_modified(tx, &partition);
         }
     }
 

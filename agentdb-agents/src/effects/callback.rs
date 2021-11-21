@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use agentdb_system::*;
-use foundationdb::Database;
 
 /// Context which can be accessed be an effectful operation,
 /// such as how many previous attempts have been made, and
@@ -22,14 +21,14 @@ impl EffectContext {
         self.attempt
     }
     /// The database connection
-    pub fn db(&self) -> Arc<Database> {
-        self.inner.db()
+    pub fn global(&self) -> &Arc<Global> {
+        self.inner.global()
     }
     /// Send a dynamic response to the operation
     pub async fn dyn_send_response(&self, message: DynMessage) -> Result<(), Error> {
         let mut ctx = ExternalContext::new();
         ctx.dyn_send(self.ref_, message)?;
-        ctx.run_with_db(&self.db()).await?;
+        ctx.run(self.global()).await?;
         Ok(())
     }
     /// Send a response to the operation

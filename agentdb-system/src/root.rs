@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use serde::{de::Visitor, Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -18,11 +20,8 @@ impl Root {
     pub fn name(self) -> &'static str {
         self.name
     }
-    pub fn as_bytes(self) -> &'static [u8] {
-        self.name.as_bytes()
-    }
-    pub fn to_bytes(self) -> Vec<u8> {
-        self.as_bytes().to_vec()
+    pub fn as_str(self) -> &'static str {
+        &self.name
     }
     pub fn from_str(name: &str) -> Option<Self> {
         for &root in inventory::iter::<Root> {
@@ -38,6 +37,12 @@ impl Root {
 
     pub const fn const_ref<A>(self, id: u128) -> AgentRef<A> {
         AgentRef::from_parts_unchecked(self, Uuid::from_u128(id))
+    }
+}
+
+impl Display for Root {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.as_str().fmt(f)
     }
 }
 

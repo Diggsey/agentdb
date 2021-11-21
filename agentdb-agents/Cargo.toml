@@ -12,7 +12,9 @@ serde = { version = "1.0.130", features = ["rc"] }
 typetag = "0.1.7"
 uuid = "0.8.2"
 inventory = "0.1.10"
-foundationdb = "0.5.0"
+foundationdb = { version = "0.5.0", features = [
+    "embedded-fdb-include",
+], path = "../../foundationdb-rs/foundationdb" }
 
 [dev-dependencies]
 pretty_env_logger = "0.4.0"
