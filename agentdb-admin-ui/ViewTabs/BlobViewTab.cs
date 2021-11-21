@@ -14,11 +14,11 @@ namespace AgentdbAdmin
     {
         private ConnectionTab parent;
         private AgentdbAdmin.IOpaqueHandle connectionHandle;
-        private List<byte> root;
+        private string root;
         private Guid blobId;
         private byte[] blobData;
 
-        public BlobViewTab(ConnectionTab parent, AgentdbAdmin.IOpaqueHandle connectionHandle, List<byte> root, Guid blobId)
+        public BlobViewTab(ConnectionTab parent, AgentdbAdmin.IOpaqueHandle connectionHandle, string root, Guid blobId)
         {
             this.parent = parent;
             this.connectionHandle = connectionHandle;

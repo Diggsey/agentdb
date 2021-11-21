@@ -16,15 +16,15 @@ mod directories;
 mod error;
 mod message;
 mod partition;
-mod subspace;
+mod typed_subspace;
 mod utils;
 
 use cancellation::{spawn_cancellable, CancellableHandle};
 use client::{client_task, PartitionRange};
-pub use directories::{Global, TypedSubspace};
+pub use directories::Global;
 pub use error::Error;
 pub use message::send_messages;
-pub use subspace::Subspace;
+pub use typed_subspace::TypedSubspace;
 pub use utils::Timestamp;
 
 const DEFAULT_PARTITION_RANGE: PartitionRange = PartitionRange {

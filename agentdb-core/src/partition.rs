@@ -289,7 +289,7 @@ impl PartitionState {
 
                             // Also clean up anything this agent stored in its user directory
                             root.user_dir
-                                .remove(tx, vec![recipient.id.to_string()])
+                                .remove_if_exists(tx, vec![recipient.id.to_string()])
                                 .await
                                 .map_err(Error::from_dir)?;
                         }
@@ -367,6 +367,10 @@ impl PartitionState {
         Ok(overall_retry_at)
     }
     async fn migrate_messages(&self, partition_range_send: PartitionRange) -> Result<(), Error> {
+        log::info!(
+            "Migrating messages from partition {} to new partitions",
+            self.partition.partition
+        );
         // Migrate unbatched messages
         let mut partition_message_range: RangeOption = self.partition.message.range().into();
         partition_message_range.limit = Some(u16::MAX as usize);
@@ -475,7 +479,6 @@ pub(crate) async fn partition_task_inner(
     state_fn: StateFn,
     cancellation: Cancellation,
 ) -> Result<(), Error> {
-    log::info!("Starting partition {}", partition);
     let partition = root.partition(&global, partition).await?;
     let partition_state = PartitionState::new(
         global,
@@ -509,4 +512,5 @@ pub(crate) async fn partition_task(
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
     }
+    log::info!("Stopping partition {}", partition);
 }

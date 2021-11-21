@@ -34,21 +34,25 @@ namespace AgentdbAdmin
             System.Windows.Forms.GroupBox databaseToolsGroupBox;
             System.Windows.Forms.FlowLayoutPanel databaseToolsLayoutPanel;
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(ConnectionTab));
+            System.Windows.Forms.GroupBox fdbDirectoryGroupBox;
             this.rootList = new System.Windows.Forms.ListBox();
             this.fdbConsoleButton = new System.Windows.Forms.Button();
             this.tabControl = new System.Windows.Forms.TabControl();
             this.homePage = new System.Windows.Forms.TabPage();
             this.closeTabButton = new System.Windows.Forms.Button();
+            this.fdbDirectoryView = new System.Windows.Forms.TreeView();
             tableLayoutPanel = new System.Windows.Forms.TableLayoutPanel();
             rootListGroupBox = new System.Windows.Forms.GroupBox();
             databaseToolsGroupBox = new System.Windows.Forms.GroupBox();
             databaseToolsLayoutPanel = new System.Windows.Forms.FlowLayoutPanel();
+            fdbDirectoryGroupBox = new System.Windows.Forms.GroupBox();
             tableLayoutPanel.SuspendLayout();
             rootListGroupBox.SuspendLayout();
             databaseToolsGroupBox.SuspendLayout();
             databaseToolsLayoutPanel.SuspendLayout();
             this.tabControl.SuspendLayout();
             this.homePage.SuspendLayout();
+            fdbDirectoryGroupBox.SuspendLayout();
             this.SuspendLayout();
             // 
             // tableLayoutPanel
@@ -56,14 +60,15 @@ namespace AgentdbAdmin
             tableLayoutPanel.ColumnCount = 2;
             tableLayoutPanel.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 50F));
             tableLayoutPanel.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 50F));
+            tableLayoutPanel.Controls.Add(fdbDirectoryGroupBox, 0, 1);
             tableLayoutPanel.Controls.Add(rootListGroupBox, 0, 0);
             tableLayoutPanel.Controls.Add(databaseToolsGroupBox, 1, 0);
             tableLayoutPanel.Dock = System.Windows.Forms.DockStyle.Fill;
             tableLayoutPanel.Location = new System.Drawing.Point(2, 2);
             tableLayoutPanel.Name = "tableLayoutPanel";
-            tableLayoutPanel.RowCount = 1;
-            tableLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 50F));
-            tableLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 50F));
+            tableLayoutPanel.RowCount = 2;
+            tableLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 25F));
+            tableLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 75F));
             tableLayoutPanel.Size = new System.Drawing.Size(676, 410);
             tableLayoutPanel.TabIndex = 1;
             // 
@@ -73,7 +78,7 @@ namespace AgentdbAdmin
             rootListGroupBox.Dock = System.Windows.Forms.DockStyle.Fill;
             rootListGroupBox.Location = new System.Drawing.Point(3, 3);
             rootListGroupBox.Name = "rootListGroupBox";
-            rootListGroupBox.Size = new System.Drawing.Size(332, 404);
+            rootListGroupBox.Size = new System.Drawing.Size(332, 96);
             rootListGroupBox.TabIndex = 0;
             rootListGroupBox.TabStop = false;
             rootListGroupBox.Text = "Detected AgentDB Roots";
@@ -86,7 +91,7 @@ namespace AgentdbAdmin
             this.rootList.ItemHeight = 20;
             this.rootList.Location = new System.Drawing.Point(3, 22);
             this.rootList.Name = "rootList";
-            this.rootList.Size = new System.Drawing.Size(326, 379);
+            this.rootList.Size = new System.Drawing.Size(326, 71);
             this.rootList.TabIndex = 0;
             this.rootList.ValueMember = "Root";
             this.rootList.KeyDown += new System.Windows.Forms.KeyEventHandler(this.rootList_KeyDown);
@@ -98,6 +103,7 @@ namespace AgentdbAdmin
             databaseToolsGroupBox.Dock = System.Windows.Forms.DockStyle.Fill;
             databaseToolsGroupBox.Location = new System.Drawing.Point(341, 3);
             databaseToolsGroupBox.Name = "databaseToolsGroupBox";
+            tableLayoutPanel.SetRowSpan(databaseToolsGroupBox, 2);
             databaseToolsGroupBox.Size = new System.Drawing.Size(332, 404);
             databaseToolsGroupBox.TabIndex = 1;
             databaseToolsGroupBox.TabStop = false;
@@ -160,6 +166,27 @@ namespace AgentdbAdmin
             this.closeTabButton.Visible = false;
             this.closeTabButton.Click += new System.EventHandler(this.closeTabButton_Click);
             // 
+            // fdbDirectoryGroupBox
+            // 
+            fdbDirectoryGroupBox.Controls.Add(this.fdbDirectoryView);
+            fdbDirectoryGroupBox.Dock = System.Windows.Forms.DockStyle.Fill;
+            fdbDirectoryGroupBox.Location = new System.Drawing.Point(3, 105);
+            fdbDirectoryGroupBox.Name = "fdbDirectoryGroupBox";
+            fdbDirectoryGroupBox.Size = new System.Drawing.Size(332, 302);
+            fdbDirectoryGroupBox.TabIndex = 2;
+            fdbDirectoryGroupBox.TabStop = false;
+            fdbDirectoryGroupBox.Text = "FoundationDB Directory";
+            // 
+            // fdbDirectoryView
+            // 
+            this.fdbDirectoryView.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.fdbDirectoryView.Location = new System.Drawing.Point(3, 22);
+            this.fdbDirectoryView.Name = "fdbDirectoryView";
+            this.fdbDirectoryView.Size = new System.Drawing.Size(326, 277);
+            this.fdbDirectoryView.TabIndex = 0;
+            this.fdbDirectoryView.AfterCollapse += new System.Windows.Forms.TreeViewEventHandler(this.fdbDirectoryView_AfterCollapse);
+            this.fdbDirectoryView.BeforeExpand += new System.Windows.Forms.TreeViewCancelEventHandler(this.fdbDirectoryView_BeforeExpand);
+            // 
             // ConnectionTab
             // 
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
@@ -176,6 +203,7 @@ namespace AgentdbAdmin
             databaseToolsLayoutPanel.ResumeLayout(false);
             this.tabControl.ResumeLayout(false);
             this.homePage.ResumeLayout(false);
+            fdbDirectoryGroupBox.ResumeLayout(false);
             this.ResumeLayout(false);
 
         }
@@ -187,5 +215,6 @@ namespace AgentdbAdmin
         private System.Windows.Forms.ListBox rootList;
         private System.Windows.Forms.Button fdbConsoleButton;
         private System.Windows.Forms.Button closeTabButton;
+        private System.Windows.Forms.TreeView fdbDirectoryView;
     }
 }

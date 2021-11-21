@@ -6,11 +6,6 @@ edition = "2018"
 [lib]
 crate-type = ["cdylib"]
 
-[profile.dev.package."*"]
-opt-level = 3
-debug-assertions = false
-overflow-checks = false
-
 [dependencies]
 foundationdb = { version = "0.5.0", features = [
     "embedded-fdb-include",

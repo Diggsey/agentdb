@@ -14,14 +14,14 @@ namespace AgentdbAdmin
     {
         private ConnectionTab parent;
         private AgentdbAdmin.IOpaqueHandle connectionHandle;
-        private List<byte> root;
+        private string root;
         private Guid from = Guid.Empty;
         private uint limit = 100;
         private bool reverse = false;
         private bool skipFirst = false;
         private List<Guid> agentIds = new List<Guid>();
 
-        public AgentListViewTab(ConnectionTab parent, AgentdbAdmin.IOpaqueHandle connectionHandle, List<byte> root)
+        public AgentListViewTab(ConnectionTab parent, AgentdbAdmin.IOpaqueHandle connectionHandle, string root)
         {
             this.parent = parent;
             this.connectionHandle = connectionHandle;

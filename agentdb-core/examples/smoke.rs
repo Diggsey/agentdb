@@ -74,7 +74,7 @@ async fn say_hello(global: &Global, id: Uuid, from: &str) -> anyhow::Result<()> 
                 }
                 .boxed()
             },
-            TransactOption::default(),
+            TransactOption::idempotent(),
         )
         .await?)
 }

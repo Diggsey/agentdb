@@ -1,60 +1,68 @@
-use std::{future::Future, task::Poll};
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
 
-use futures::{future::FusedFuture, pin_mut, ready, FutureExt};
+use futures::{future::FusedFuture, FutureExt};
 use tokio::{
-    sync::watch,
+    sync::{OwnedRwLockReadGuard, OwnedRwLockWriteGuard, RwLock},
     task::{JoinError, JoinHandle},
 };
 
-#[derive(Debug, Clone)]
 pub struct Cancellation {
-    rx: watch::Receiver<bool>,
-    cancelled: bool,
+    inner: Arc<RwLock<bool>>,
+    fut: Pin<Box<dyn Future<Output = OwnedRwLockReadGuard<bool>> + Send + Sync>>,
 }
 
 impl Cancellation {
     pub fn is_cancelled(&self) -> bool {
-        *self.rx.borrow()
+        matches!(self.inner.try_read(), Ok(x) if *x)
+    }
+}
+
+impl Clone for Cancellation {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            fut: Box::pin(self.inner.clone().read_owned()),
+        }
     }
 }
 
 impl Future for Cancellation {
     type Output = ();
 
-    fn poll(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output> {
-        if !*self.rx.borrow_and_update() {
-            let changed = self.rx.changed();
-            pin_mut!(changed);
-            ready!(changed.poll(cx)).ok();
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match self.fut.poll_unpin(cx) {
+            Poll::Ready(x) if *x => Poll::Ready(()),
+            _ => Poll::Pending,
         }
-        self.cancelled = true;
-        Poll::Ready(())
     }
 }
 
 impl FusedFuture for Cancellation {
     fn is_terminated(&self) -> bool {
-        self.cancelled
+        false
     }
 }
 
 pub struct CancellableHandle<T> {
-    tx: watch::Sender<bool>,
+    guard: Option<OwnedRwLockWriteGuard<bool>>,
     inner: JoinHandle<T>,
 }
 
 impl<T> CancellableHandle<T> {
-    pub fn cancel(&self) {
-        let _ = self.tx.send(true);
+    pub fn cancel(&mut self) {
+        self.guard.take();
     }
     pub fn forget(self) -> JoinHandle<T> {
-        let Self { tx, inner } = self;
-        tokio::spawn(async move {
-            tx.closed().await;
-        });
+        let Self { guard, inner } = self;
+        if let Some(mut guard) = guard {
+            // Don't trigger cancellation when we release the write lock
+            *guard = false;
+        }
         inner
     }
 }
@@ -62,16 +70,7 @@ impl<T> CancellableHandle<T> {
 impl<T> Future for CancellableHandle<T> {
     type Output = Result<T, JoinError>;
 
-    fn poll(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> Poll<Self::Output> {
-        {
-            // Wait for all cancellations to be dropped
-            let closed = self.tx.closed();
-            pin_mut!(closed);
-            ready!(closed.poll(cx));
-        }
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.inner.poll_unpin(cx)
     }
 }
@@ -79,10 +78,18 @@ impl<T> Future for CancellableHandle<T> {
 pub fn spawn_cancellable<T: Send + 'static, F: Future<Output = T> + Send + 'static>(
     f: impl FnOnce(Cancellation) -> F,
 ) -> CancellableHandle<T> {
-    let (tx, rx) = watch::channel(false);
+    let rwlock = Arc::new(RwLock::new(true));
+    let write_guard = rwlock
+        .clone()
+        .try_write_owned()
+        .expect("RwLock can be immediately locked");
+    let read_guard = Box::pin(rwlock.clone().read_owned());
     let inner = tokio::spawn(f(Cancellation {
-        rx,
-        cancelled: false,
+        inner: rwlock,
+        fut: read_guard,
     }));
-    CancellableHandle { tx, inner }
+    CancellableHandle {
+        guard: Some(write_guard),
+        inner,
+    }
 }

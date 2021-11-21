@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, future::Future, ops::Range, sync::Arc};
 
 use chrono::{DateTime, Utc};
-use foundationdb::{api::NetworkAutoStop, TransactOption};
+use foundationdb::{api::NetworkAutoStop, directory::Directory, TransactOption};
 use futures::{stream::TryStreamExt, FutureExt};
 use lazy_static::lazy_static;
 use rnet::{net, Delegate2, Net, ToNet};
@@ -217,5 +217,32 @@ fn list_agents(
 ) {
     wrap_async(continuation, async move {
         admin::list_agents(&con.global, &root, from, limit as usize, reverse).await
+    });
+}
+
+#[net]
+fn list_directory(
+    con: Arc<Connection>,
+    path: Vec<String>,
+    continuation: Continuation<Vec<String>>,
+) {
+    wrap_async(continuation, async move {
+        con.global
+            .db()
+            .transact_boxed(
+                (con.global.clone(), path),
+                move |tx, (global, path)| {
+                    async move {
+                        global
+                            .dir()
+                            .list(tx, path.clone())
+                            .await
+                            .map_err(Error::from_dir)
+                    }
+                    .boxed()
+                },
+                TransactOption::idempotent(),
+            )
+            .await
     });
 }

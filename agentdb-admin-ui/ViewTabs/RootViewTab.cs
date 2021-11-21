@@ -15,7 +15,7 @@ namespace AgentdbAdmin
     {
         private ConnectionTab parent;
         AgentdbAdmin.IOpaqueHandle connectionHandle;
-        private List<byte> root;
+        private string root;
         private AgentdbAdmin.RootDesc rootDesc;
         private TreeNode overviewNode;
         private TreeNode clientsNode;
@@ -26,7 +26,7 @@ namespace AgentdbAdmin
             public uint Index { get; set; }
         }
 
-        public RootViewTab(ConnectionTab parent, AgentdbAdmin.IOpaqueHandle connectionHandle, List<byte> root)
+        public RootViewTab(ConnectionTab parent, AgentdbAdmin.IOpaqueHandle connectionHandle, string root)
         {
             this.parent = parent;
             this.connectionHandle = connectionHandle;
@@ -89,7 +89,7 @@ namespace AgentdbAdmin
             }
             else if (rootDesc.partitions != null)
             {
-                detailsNameBox.Text = Utils.StringifyBytes(root);
+                detailsNameBox.Text = root;
                 detailsTypeBox.Text = "Root";
                 sendPartitionBox.Text = $"{rootDesc.partitionRangeSend.Item1} to {rootDesc.partitionRangeSend.Item2 - 1}";
                 recvPartitionBox.Text = $"{rootDesc.partitionRangeRecv.Item1} to {rootDesc.partitionRangeRecv.Item2 - 1}";
@@ -303,7 +303,7 @@ namespace AgentdbAdmin
         private async void repartitionButton_Click(object sender, EventArgs e)
         {
             var dialog = new Modals.RepartitionModal();
-            dialog.RootName = Utils.StringifyBytes(root);
+            dialog.RootName = root;
             dialog.PartitionRecvRange = rootDesc.partitionRangeRecv;
             dialog.PartitionSendRange = rootDesc.partitionRangeSend;
             dialog.NewPartitionRange = rootDesc.partitionRangeSend;

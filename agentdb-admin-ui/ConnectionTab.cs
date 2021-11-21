@@ -14,14 +14,8 @@ namespace AgentdbAdmin
     {
         class RootItem
         {
-            public List<byte> Root { get; set; }
-            public string Title
-            {
-                get
-                {
-                    return Utils.StringifyBytes(Root);
-                }
-            }
+            public string Root { get; set; }
+            public string Title => Root;
         }
 
         public abstract class PageId
@@ -32,8 +26,8 @@ namespace AgentdbAdmin
 
         public class RootPageId: PageId
         {
-            public List<byte> Root { get; set; }
-            public override string Title => Utils.StringifyBytes(Root);
+            public string Root { get; set; }
+            public override string Title => Root;
 
             public override IViewTab CreateTab(ConnectionTab parent, AgentdbAdmin.IOpaqueHandle connectionHandle)
             {
@@ -43,19 +37,19 @@ namespace AgentdbAdmin
             public override bool Equals(object obj)
             {
                 return obj is RootPageId id &&
-                       EqualityComparer<List<byte>>.Default.Equals(Root, id.Root);
+                       EqualityComparer<string>.Default.Equals(Root, id.Root);
             }
 
             public override int GetHashCode()
             {
-                return -1490287827 + EqualityComparer<List<byte>>.Default.GetHashCode(Root);
+                return -1490287827 + EqualityComparer<string>.Default.GetHashCode(Root);
             }
         }
 
         public class ListAgentsPageId : PageId
         {
-            public List<byte> Root { get; set; }
-            public override string Title => Utils.StringifyBytes(Root) + ": Agent list";
+            public string Root { get; set; }
+            public override string Title => Root + ": Agent list";
 
             public override IViewTab CreateTab(ConnectionTab parent, AgentdbAdmin.IOpaqueHandle connectionHandle)
             {
@@ -64,22 +58,21 @@ namespace AgentdbAdmin
 
             public override bool Equals(object obj)
             {
-                return obj is ListAgentsPageId id &&
-                       EqualityComparer<List<byte>>.Default.Equals(Root, id.Root);
+                return obj is ListAgentsPageId id && Root == id.Root;
             }
 
             public override int GetHashCode()
             {
-                return -1490287827 + EqualityComparer<List<byte>>.Default.GetHashCode(Root);
+                return -1490287827 + EqualityComparer<string>.Default.GetHashCode(Root);
             }
         }
 
         public class BlobPageId : PageId
         {
-            public List<byte> Root { get; set; }
+            public string Root { get; set; }
             public Guid BlobId { get; set; }
 
-            public override string Title => Utils.StringifyBytes(Root) + ": " + BlobId.ToString();
+            public override string Title => Root + ": " + BlobId.ToString();
 
             public override IViewTab CreateTab(ConnectionTab parent, AgentdbAdmin.IOpaqueHandle connectionHandle)
             {
@@ -89,14 +82,14 @@ namespace AgentdbAdmin
             public override bool Equals(object obj)
             {
                 return obj is BlobPageId id &&
-                       EqualityComparer<List<byte>>.Default.Equals(Root, id.Root) &&
+                       EqualityComparer<string>.Default.Equals(Root, id.Root) &&
                        BlobId.Equals(id.BlobId);
             }
 
             public override int GetHashCode()
             {
                 int hashCode = 1616903828;
-                hashCode = hashCode * -1521134295 + EqualityComparer<List<byte>>.Default.GetHashCode(Root);
+                hashCode = hashCode * -1521134295 + EqualityComparer<string>.Default.GetHashCode(Root);
                 hashCode = hashCode * -1521134295 + BlobId.GetHashCode();
                 return hashCode;
             }
@@ -116,11 +109,32 @@ namespace AgentdbAdmin
             InitializeComponent();
             tabHistory.Add(homePage);
         }
+
+        private void UnpopulateTreeNodes(TreeNodeCollection collection)
+        {
+            collection.Clear();
+            collection.Add(new TreeNode("Loading..."));
+        }
+
+        private void PopulateTreeNodes(TreeNodeCollection collection, IEnumerable<string> names)
+        {
+            fdbDirectoryView.BeginUpdate();
+            collection.Clear();
+            foreach (var name in names)
+            {
+                var node = new TreeNode(name);
+                node.Tag = name;
+                UnpopulateTreeNodes(node.Nodes);
+                collection.Add(node);
+            }
+            fdbDirectoryView.EndUpdate();
+        }
+
         public async void PerformRefresh()
         {
             if (tabControl.SelectedTab == homePage)
             {
-                var roots = await MainForm.PerformAsync<List<List<byte>>>("Finding roots", continuation =>
+                var roots = await MainForm.PerformAsync<List<string>>("Finding roots", continuation =>
                 {
                     AgentdbAdmin.ListRoots(connectionHandle, continuation);
                 });
@@ -143,6 +157,13 @@ namespace AgentdbAdmin
                     rootList.SelectedItem = itemToSelect;
                 }
                 rootList.EndUpdate();
+
+                var dirs = await MainForm.PerformAsync<List<string>>("Listing directories", continuation =>
+                {
+                    AgentdbAdmin.ListDirectory(connectionHandle, new string[] { }, continuation);
+                });
+
+                PopulateTreeNodes(fdbDirectoryView.Nodes, dirs);
             } else
             {
                 var viewTab = tabControl.SelectedTab?.Controls[0] as IViewTab;
@@ -226,6 +247,30 @@ namespace AgentdbAdmin
             {
                 e.Cancel = true;
             }
+        }
+
+        private async void fdbDirectoryView_BeforeExpand(object sender, TreeViewCancelEventArgs e)
+        {
+            var path = new List<string>();
+            var node = e.Node;
+            while (node != null)
+            {
+                path.Add(node.Text);
+                node = node.Parent;
+            }
+            path.Reverse();
+
+            var dirs = await MainForm.PerformAsync<List<string>>("Listing subdirectories", continuation =>
+            {
+                AgentdbAdmin.ListDirectory(connectionHandle, path, continuation);
+            });
+
+            PopulateTreeNodes(e.Node.Nodes, dirs);
+        }
+
+        private void fdbDirectoryView_AfterCollapse(object sender, TreeViewEventArgs e)
+        {
+            UnpopulateTreeNodes(e.Node.Nodes);
         }
     }
 

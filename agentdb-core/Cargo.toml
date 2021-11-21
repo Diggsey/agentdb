@@ -11,7 +11,7 @@ foundationdb = { version = "0.5.0", features = [
     "embedded-fdb-include",
 ], path = "../../foundationdb-rs/foundationdb" }
 tokio = { version = "1.11.0", features = ["full"] }
-anyhow = "1.0.43"
+anyhow = { version = "1.0.43", features = ["backtrace"] }
 futures = "0.3.17"
 uuid = { version = "0.8.2", features = ["v4", "serde"] }
 byteorder = "1.4.3"
