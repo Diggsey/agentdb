@@ -27,7 +27,6 @@ namespace AgentdbAdmin
             public Nullable<DateTime> scheduledFor;
         }
         public struct PartitionDesc {
-            public long agentCount;
             public List<MessageDesc> pendingMessages;
             public bool pendingMessagesOverflow;
             public List<MessageDesc> batchedMessages;
@@ -38,6 +37,17 @@ namespace AgentdbAdmin
             public (uint,uint) partitionRangeSend;
             public List<ClientDesc> clients;
             public SortedDictionary<uint,PartitionDesc> partitions;
+            public long agentCount;
+        }
+        public struct KeyValueDesc {
+            public List<byte> keyBytes;
+            public List<string> keyDecoded;
+            public List<byte> valueBytes;
+        }
+        public struct DirectoryDesc {
+            public List<string> path;
+            public List<byte> prefix;
+            public List<byte> layer;
         }
         public static IOpaqueHandle Connect(
             string path
@@ -48,14 +58,14 @@ namespace AgentdbAdmin
             IOpaqueHandle con,
             Action<List<string>,string> continuation
         ) {
-            _FnListRoots(((_OpaqueHandle)(con)).ToInner(3845596548092975196),((Func<Action<List<string>,string>, _RawDelegate>)(_arg3 => _AllocDelegate(new _LocalDelegate7((_arg3_arg0,_arg3_arg1) => _arg3(_DecodeOption(_arg3_arg0, _arg4 => _FreeSlice<string, _RawSlice, List<string>>(_arg4, 16, 8, _arg5 => _FreeStr(_arg5))),_DecodeOption(_arg3_arg1, _arg6 => _FreeStr(_arg6)))), _arg3)))(continuation));
+            _FnListRoots(((_OpaqueHandle)(con)).ToInner(12780088662675494222),((Func<Action<List<string>,string>, _RawDelegate>)(_arg3 => _AllocDelegate(new _LocalDelegate7((_arg3_arg0,_arg3_arg1) => _arg3(_DecodeOption(_arg3_arg0, _arg4 => _FreeSlice<string, _RawSlice, List<string>>(_arg4, 16, 8, _arg5 => _FreeStr(_arg5))),_DecodeOption(_arg3_arg1, _arg6 => _FreeStr(_arg6)))), _arg3)))(continuation));
         }
         public static void DescribeRoot(
             IOpaqueHandle con,
             string root,
             Action<RootDesc,string> continuation
         ) {
-            _FnDescribeRoot(((_OpaqueHandle)(con)).ToInner(3845596548092975196),_AllocStr(root),((Func<Action<RootDesc,string>, _RawDelegate>)(_arg8 => _AllocDelegate(new _LocalDelegate11((_arg8_arg0,_arg8_arg1) => _arg8(_DecodeOption(_arg8_arg0, _arg9 => (_arg9).Decode()),_DecodeOption(_arg8_arg1, _arg10 => _FreeStr(_arg10)))), _arg8)))(continuation));
+            _FnDescribeRoot(((_OpaqueHandle)(con)).ToInner(12780088662675494222),_AllocStr(root),((Func<Action<RootDesc,string>, _RawDelegate>)(_arg8 => _AllocDelegate(new _LocalDelegate11((_arg8_arg0,_arg8_arg1) => _arg8(_DecodeOption(_arg8_arg0, _arg9 => (_arg9).Decode()),_DecodeOption(_arg8_arg1, _arg10 => _FreeStr(_arg10)))), _arg8)))(continuation));
         }
         public static void LoadBlob(
             IOpaqueHandle con,
@@ -63,7 +73,7 @@ namespace AgentdbAdmin
             Guid blobId,
             Action<List<byte>,string> continuation
         ) {
-            _FnLoadBlob(((_OpaqueHandle)(con)).ToInner(3845596548092975196),_AllocStr(root),blobId,((Func<Action<List<byte>,string>, _RawDelegate>)(_arg12 => _AllocDelegate(new _LocalDelegate17((_arg12_arg0,_arg12_arg1) => _arg12(_DecodeOption(_arg12_arg0, _arg13 => _DecodeOption(_arg13, _arg14 => _FreeSlice<byte, byte, List<byte>>(_arg14, 1, 1, _arg15 => _arg15))),_DecodeOption(_arg12_arg1, _arg16 => _FreeStr(_arg16)))), _arg12)))(continuation));
+            _FnLoadBlob(((_OpaqueHandle)(con)).ToInner(12780088662675494222),_AllocStr(root),blobId,((Func<Action<List<byte>,string>, _RawDelegate>)(_arg12 => _AllocDelegate(new _LocalDelegate17((_arg12_arg0,_arg12_arg1) => _arg12(_DecodeOption(_arg12_arg0, _arg13 => _DecodeOption(_arg13, _arg14 => _FreeSlice<byte, byte, List<byte>>(_arg14, 1, 1, _arg15 => _arg15))),_DecodeOption(_arg12_arg1, _arg16 => _FreeStr(_arg16)))), _arg12)))(continuation));
         }
         public static void ChangePartitions(
             IOpaqueHandle con,
@@ -71,7 +81,7 @@ namespace AgentdbAdmin
             (uint,uint) partitionRange,
             Action<NoResult,string> continuation
         ) {
-            _FnChangePartitions(((_OpaqueHandle)(con)).ToInner(3845596548092975196),_AllocStr(root),((Func<(uint,uint), _RawTuple3>)(_arg18 => new _RawTuple3 { elem0 = _arg18.Item1,elem1 = _arg18.Item2 }))(partitionRange),((Func<Action<NoResult,string>, _RawDelegate>)(_arg19 => _AllocDelegate(new _LocalDelegate22((_arg19_arg0,_arg19_arg1) => _arg19(_DecodeOption(_arg19_arg0, _arg20 => (_arg20).Decode()),_DecodeOption(_arg19_arg1, _arg21 => _FreeStr(_arg21)))), _arg19)))(continuation));
+            _FnChangePartitions(((_OpaqueHandle)(con)).ToInner(12780088662675494222),_AllocStr(root),((Func<(uint,uint), _RawTuple3>)(_arg18 => new _RawTuple3 { elem0 = _arg18.Item1,elem1 = _arg18.Item2 }))(partitionRange),((Func<Action<NoResult,string>, _RawDelegate>)(_arg19 => _AllocDelegate(new _LocalDelegate22((_arg19_arg0,_arg19_arg1) => _arg19(_DecodeOption(_arg19_arg0, _arg20 => (_arg20).Decode()),_DecodeOption(_arg19_arg1, _arg21 => _FreeStr(_arg21)))), _arg19)))(continuation));
         }
         public static void ListAgents(
             IOpaqueHandle con,
@@ -81,14 +91,31 @@ namespace AgentdbAdmin
             bool reverse,
             Action<List<Guid>,string> continuation
         ) {
-            _FnListAgents(((_OpaqueHandle)(con)).ToInner(3845596548092975196),_AllocStr(root),from,limit,(reverse ? (byte)1 : (byte)0),((Func<Action<List<Guid>,string>, _RawDelegate>)(_arg23 => _AllocDelegate(new _LocalDelegate27((_arg23_arg0,_arg23_arg1) => _arg23(_DecodeOption(_arg23_arg0, _arg24 => _FreeSlice<Guid, Guid, List<Guid>>(_arg24, 16, 4, _arg25 => _arg25)),_DecodeOption(_arg23_arg1, _arg26 => _FreeStr(_arg26)))), _arg23)))(continuation));
+            _FnListAgents(((_OpaqueHandle)(con)).ToInner(12780088662675494222),_AllocStr(root),from,limit,(reverse ? (byte)1 : (byte)0),((Func<Action<List<Guid>,string>, _RawDelegate>)(_arg23 => _AllocDelegate(new _LocalDelegate27((_arg23_arg0,_arg23_arg1) => _arg23(_DecodeOption(_arg23_arg0, _arg24 => _FreeSlice<Guid, Guid, List<Guid>>(_arg24, 16, 4, _arg25 => _arg25)),_DecodeOption(_arg23_arg1, _arg26 => _FreeStr(_arg26)))), _arg23)))(continuation));
+        }
+        public static void ListSubspace(
+            IOpaqueHandle con,
+            IReadOnlyCollection<byte> prefix,
+            IReadOnlyCollection<byte> from,
+            uint limit,
+            bool reverse,
+            Action<List<KeyValueDesc>,string> continuation
+        ) {
+            _FnListSubspace(((_OpaqueHandle)(con)).ToInner(12780088662675494222),_AllocSlice<byte, byte>(prefix, 1, 1, _arg28 => _arg28),_AllocSlice<byte, byte>(from, 1, 1, _arg29 => _arg29),limit,(reverse ? (byte)1 : (byte)0),((Func<Action<List<KeyValueDesc>,string>, _RawDelegate>)(_arg30 => _AllocDelegate(new _LocalDelegate34((_arg30_arg0,_arg30_arg1) => _arg30(_DecodeOption(_arg30_arg0, _arg31 => _FreeSlice<KeyValueDesc, _StructKeyValueDesc, List<KeyValueDesc>>(_arg31, 48, 8, _arg32 => (_arg32).Decode())),_DecodeOption(_arg30_arg1, _arg33 => _FreeStr(_arg33)))), _arg30)))(continuation));
         }
         public static void ListDirectory(
             IOpaqueHandle con,
             IReadOnlyCollection<string> path,
             Action<List<string>,string> continuation
         ) {
-            _FnListDirectory(((_OpaqueHandle)(con)).ToInner(3845596548092975196),_AllocSlice<string, _RawSlice>(path, 16, 8, _arg28 => _AllocStr(_arg28)),((Func<Action<List<string>,string>, _RawDelegate>)(_arg29 => _AllocDelegate(new _LocalDelegate33((_arg29_arg0,_arg29_arg1) => _arg29(_DecodeOption(_arg29_arg0, _arg30 => _FreeSlice<string, _RawSlice, List<string>>(_arg30, 16, 8, _arg31 => _FreeStr(_arg31))),_DecodeOption(_arg29_arg1, _arg32 => _FreeStr(_arg32)))), _arg29)))(continuation));
+            _FnListDirectory(((_OpaqueHandle)(con)).ToInner(12780088662675494222),_AllocSlice<string, _RawSlice>(path, 16, 8, _arg35 => _AllocStr(_arg35)),((Func<Action<List<string>,string>, _RawDelegate>)(_arg36 => _AllocDelegate(new _LocalDelegate40((_arg36_arg0,_arg36_arg1) => _arg36(_DecodeOption(_arg36_arg0, _arg37 => _FreeSlice<string, _RawSlice, List<string>>(_arg37, 16, 8, _arg38 => _FreeStr(_arg38))),_DecodeOption(_arg36_arg1, _arg39 => _FreeStr(_arg39)))), _arg36)))(continuation));
+        }
+        public static void OpenDirectory(
+            IOpaqueHandle con,
+            IReadOnlyCollection<string> path,
+            Action<DirectoryDesc,string> continuation
+        ) {
+            _FnOpenDirectory(((_OpaqueHandle)(con)).ToInner(12780088662675494222),_AllocSlice<string, _RawSlice>(path, 16, 8, _arg41 => _AllocStr(_arg41)),((Func<Action<DirectoryDesc,string>, _RawDelegate>)(_arg42 => _AllocDelegate(new _LocalDelegate45((_arg42_arg0,_arg42_arg1) => _arg42(_DecodeOption(_arg42_arg0, _arg43 => (_arg43).Decode()),_DecodeOption(_arg42_arg1, _arg44 => _FreeStr(_arg44)))), _arg42)))(continuation));
         }
         [StructLayout(LayoutKind.Sequential)]
         private struct _StructClientDesc {
@@ -99,14 +126,14 @@ namespace AgentdbAdmin
                 return new _StructClientDesc {
                     lastActiveTs = (structArg.lastActiveTs).ToUniversalTime().Ticks,
                     name = _AllocStr(structArg.name),
-                    partitions = ((Func<(uint,uint), _RawTuple3>)(_arg34 => new _RawTuple3 { elem0 = _arg34.Item1,elem1 = _arg34.Item2 }))(structArg.partitions)
+                    partitions = ((Func<(uint,uint), _RawTuple3>)(_arg46 => new _RawTuple3 { elem0 = _arg46.Item1,elem1 = _arg46.Item2 }))(structArg.partitions)
                 };
             }
             public ClientDesc Decode() {
                 return new ClientDesc {
                     lastActiveTs = new DateTime(this.lastActiveTs, DateTimeKind.Utc),
                     name = _FreeStr(this.name),
-                    partitions = ((Func<_RawTuple3, (uint,uint)>)(_arg35 => (_arg35.elem0,_arg35.elem1)))(this.partitions)
+                    partitions = ((Func<_RawTuple3, (uint,uint)>)(_arg47 => (_arg47.elem0,_arg47.elem1)))(this.partitions)
                 };
             }
         }
@@ -125,44 +152,41 @@ namespace AgentdbAdmin
         private struct _StructMessageDesc {
             public Guid messageId;
             public Guid recipientId;
-            public _RawTuple5 scheduledFor;
+            public _RawTuple6 scheduledFor;
             public static _StructMessageDesc Encode(MessageDesc structArg) {
                 return new _StructMessageDesc {
                     messageId = structArg.messageId,
                     recipientId = structArg.recipientId,
-                    scheduledFor = _EncodeOption(structArg.scheduledFor, _arg36 => (_arg36.Value).ToUniversalTime().Ticks)
+                    scheduledFor = _EncodeOption(structArg.scheduledFor, _arg48 => (_arg48.Value).ToUniversalTime().Ticks)
                 };
             }
             public MessageDesc Decode() {
                 return new MessageDesc {
                     messageId = this.messageId,
                     recipientId = this.recipientId,
-                    scheduledFor = _DecodeOption(this.scheduledFor, _arg37 => new Nullable<DateTime>(new DateTime(_arg37, DateTimeKind.Utc)))
+                    scheduledFor = _DecodeOption(this.scheduledFor, _arg49 => new Nullable<DateTime>(new DateTime(_arg49, DateTimeKind.Utc)))
                 };
             }
         }
         [StructLayout(LayoutKind.Sequential)]
         private struct _StructPartitionDesc {
-            public long agentCount;
             public _RawSlice pendingMessages;
             public byte pendingMessagesOverflow;
             public _RawSlice batchedMessages;
             public byte batchedMessagesOverflow;
             public static _StructPartitionDesc Encode(PartitionDesc structArg) {
                 return new _StructPartitionDesc {
-                    agentCount = structArg.agentCount,
-                    pendingMessages = _AllocSlice<MessageDesc, _StructMessageDesc>(structArg.pendingMessages, 48, 8, _arg38 => _StructMessageDesc.Encode(_arg38)),
+                    pendingMessages = _AllocSlice<MessageDesc, _StructMessageDesc>(structArg.pendingMessages, 48, 8, _arg50 => _StructMessageDesc.Encode(_arg50)),
                     pendingMessagesOverflow = (structArg.pendingMessagesOverflow ? (byte)1 : (byte)0),
-                    batchedMessages = _AllocSlice<MessageDesc, _StructMessageDesc>(structArg.batchedMessages, 48, 8, _arg39 => _StructMessageDesc.Encode(_arg39)),
+                    batchedMessages = _AllocSlice<MessageDesc, _StructMessageDesc>(structArg.batchedMessages, 48, 8, _arg51 => _StructMessageDesc.Encode(_arg51)),
                     batchedMessagesOverflow = (structArg.batchedMessagesOverflow ? (byte)1 : (byte)0)
                 };
             }
             public PartitionDesc Decode() {
                 return new PartitionDesc {
-                    agentCount = this.agentCount,
-                    pendingMessages = _FreeSlice<MessageDesc, _StructMessageDesc, List<MessageDesc>>(this.pendingMessages, 48, 8, _arg40 => (_arg40).Decode()),
+                    pendingMessages = _FreeSlice<MessageDesc, _StructMessageDesc, List<MessageDesc>>(this.pendingMessages, 48, 8, _arg52 => (_arg52).Decode()),
                     pendingMessagesOverflow = (this.pendingMessagesOverflow != 0),
-                    batchedMessages = _FreeSlice<MessageDesc, _StructMessageDesc, List<MessageDesc>>(this.batchedMessages, 48, 8, _arg41 => (_arg41).Decode()),
+                    batchedMessages = _FreeSlice<MessageDesc, _StructMessageDesc, List<MessageDesc>>(this.batchedMessages, 48, 8, _arg53 => (_arg53).Decode()),
                     batchedMessagesOverflow = (this.batchedMessagesOverflow != 0)
                 };
             }
@@ -173,25 +197,68 @@ namespace AgentdbAdmin
             public _RawTuple3 partitionRangeSend;
             public _RawSlice clients;
             public _RawSlice partitions;
+            public long agentCount;
             public static _StructRootDesc Encode(RootDesc structArg) {
                 return new _StructRootDesc {
-                    partitionRangeRecv = ((Func<(uint,uint), _RawTuple3>)(_arg42 => new _RawTuple3 { elem0 = _arg42.Item1,elem1 = _arg42.Item2 }))(structArg.partitionRangeRecv),
-                    partitionRangeSend = ((Func<(uint,uint), _RawTuple3>)(_arg43 => new _RawTuple3 { elem0 = _arg43.Item1,elem1 = _arg43.Item2 }))(structArg.partitionRangeSend),
-                    clients = _AllocSlice<ClientDesc, _StructClientDesc>(structArg.clients, 32, 8, _arg44 => _StructClientDesc.Encode(_arg44)),
-                    partitions = _AllocDict<uint, PartitionDesc, _RawTuple6>(structArg.partitions, 64, 8, _arg45 => ((Func<(uint,PartitionDesc), _RawTuple6>)(_arg46 => new _RawTuple6 { elem0 = _arg46.Item1,elem1 = _StructPartitionDesc.Encode(_arg46.Item2) }))(_arg45))
+                    partitionRangeRecv = ((Func<(uint,uint), _RawTuple3>)(_arg54 => new _RawTuple3 { elem0 = _arg54.Item1,elem1 = _arg54.Item2 }))(structArg.partitionRangeRecv),
+                    partitionRangeSend = ((Func<(uint,uint), _RawTuple3>)(_arg55 => new _RawTuple3 { elem0 = _arg55.Item1,elem1 = _arg55.Item2 }))(structArg.partitionRangeSend),
+                    clients = _AllocSlice<ClientDesc, _StructClientDesc>(structArg.clients, 32, 8, _arg56 => _StructClientDesc.Encode(_arg56)),
+                    partitions = _AllocDict<uint, PartitionDesc, _RawTuple7>(structArg.partitions, 56, 8, _arg57 => ((Func<(uint,PartitionDesc), _RawTuple7>)(_arg58 => new _RawTuple7 { elem0 = _arg58.Item1,elem1 = _StructPartitionDesc.Encode(_arg58.Item2) }))(_arg57)),
+                    agentCount = structArg.agentCount
                 };
             }
             public RootDesc Decode() {
                 return new RootDesc {
-                    partitionRangeRecv = ((Func<_RawTuple3, (uint,uint)>)(_arg47 => (_arg47.elem0,_arg47.elem1)))(this.partitionRangeRecv),
-                    partitionRangeSend = ((Func<_RawTuple3, (uint,uint)>)(_arg48 => (_arg48.elem0,_arg48.elem1)))(this.partitionRangeSend),
-                    clients = _FreeSlice<ClientDesc, _StructClientDesc, List<ClientDesc>>(this.clients, 32, 8, _arg49 => (_arg49).Decode()),
-                    partitions = _FreeDict<uint, PartitionDesc, _RawTuple6, SortedDictionary<uint, PartitionDesc>>(this.partitions, 64, 8, _arg50 => ((Func<_RawTuple6, (uint,PartitionDesc)>)(_arg51 => (_arg51.elem0,(_arg51.elem1).Decode())))(_arg50))
+                    partitionRangeRecv = ((Func<_RawTuple3, (uint,uint)>)(_arg59 => (_arg59.elem0,_arg59.elem1)))(this.partitionRangeRecv),
+                    partitionRangeSend = ((Func<_RawTuple3, (uint,uint)>)(_arg60 => (_arg60.elem0,_arg60.elem1)))(this.partitionRangeSend),
+                    clients = _FreeSlice<ClientDesc, _StructClientDesc, List<ClientDesc>>(this.clients, 32, 8, _arg61 => (_arg61).Decode()),
+                    partitions = _FreeDict<uint, PartitionDesc, _RawTuple7, SortedDictionary<uint, PartitionDesc>>(this.partitions, 56, 8, _arg62 => ((Func<_RawTuple7, (uint,PartitionDesc)>)(_arg63 => (_arg63.elem0,(_arg63.elem1).Decode())))(_arg62)),
+                    agentCount = this.agentCount
+                };
+            }
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct _StructKeyValueDesc {
+            public _RawSlice keyBytes;
+            public _RawSlice keyDecoded;
+            public _RawSlice valueBytes;
+            public static _StructKeyValueDesc Encode(KeyValueDesc structArg) {
+                return new _StructKeyValueDesc {
+                    keyBytes = _AllocSlice<byte, byte>(structArg.keyBytes, 1, 1, _arg64 => _arg64),
+                    keyDecoded = _AllocSlice<string, _RawSlice>(structArg.keyDecoded, 16, 8, _arg65 => _AllocStr(_arg65)),
+                    valueBytes = _AllocSlice<byte, byte>(structArg.valueBytes, 1, 1, _arg66 => _arg66)
+                };
+            }
+            public KeyValueDesc Decode() {
+                return new KeyValueDesc {
+                    keyBytes = _FreeSlice<byte, byte, List<byte>>(this.keyBytes, 1, 1, _arg67 => _arg67),
+                    keyDecoded = _FreeSlice<string, _RawSlice, List<string>>(this.keyDecoded, 16, 8, _arg68 => _FreeStr(_arg68)),
+                    valueBytes = _FreeSlice<byte, byte, List<byte>>(this.valueBytes, 1, 1, _arg69 => _arg69)
+                };
+            }
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct _StructDirectoryDesc {
+            public _RawSlice path;
+            public _RawSlice prefix;
+            public _RawSlice layer;
+            public static _StructDirectoryDesc Encode(DirectoryDesc structArg) {
+                return new _StructDirectoryDesc {
+                    path = _AllocSlice<string, _RawSlice>(structArg.path, 16, 8, _arg70 => _AllocStr(_arg70)),
+                    prefix = _AllocSlice<byte, byte>(structArg.prefix, 1, 1, _arg71 => _arg71),
+                    layer = _AllocSlice<byte, byte>(structArg.layer, 1, 1, _arg72 => _arg72)
+                };
+            }
+            public DirectoryDesc Decode() {
+                return new DirectoryDesc {
+                    path = _FreeSlice<string, _RawSlice, List<string>>(this.path, 16, 8, _arg73 => _FreeStr(_arg73)),
+                    prefix = _FreeSlice<byte, byte, List<byte>>(this.prefix, 1, 1, _arg74 => _arg74),
+                    layer = _FreeSlice<byte, byte, List<byte>>(this.layer, 1, 1, _arg75 => _arg75)
                 };
             }
         }
         [DllImport("agentdb_admin", EntryPoint = "rnet_export_connect", CallingConvention = CallingConvention.Cdecl)]
-        private static extern _RawTuple7 _FnConnect(
+        private static extern _RawTuple8 _FnConnect(
             _RawTuple0 path
         );
         [DllImport("agentdb_admin", EntryPoint = "rnet_export_list_roots", CallingConvention = CallingConvention.Cdecl)]
@@ -228,8 +295,23 @@ namespace AgentdbAdmin
             byte reverse,
             _RawDelegate continuation
         );
+        [DllImport("agentdb_admin", EntryPoint = "rnet_export_list_subspace", CallingConvention = CallingConvention.Cdecl)]
+        private static extern void _FnListSubspace(
+            _RawOpaqueHandle con,
+            _RawSlice prefix,
+            _RawSlice from,
+            uint limit,
+            byte reverse,
+            _RawDelegate continuation
+        );
         [DllImport("agentdb_admin", EntryPoint = "rnet_export_list_directory", CallingConvention = CallingConvention.Cdecl)]
         private static extern void _FnListDirectory(
+            _RawOpaqueHandle con,
+            _RawSlice path,
+            _RawDelegate continuation
+        );
+        [DllImport("agentdb_admin", EntryPoint = "rnet_export_open_directory", CallingConvention = CallingConvention.Cdecl)]
+        private static extern void _FnOpenDirectory(
             _RawOpaqueHandle con,
             _RawSlice path,
             _RawDelegate continuation
@@ -239,7 +321,9 @@ namespace AgentdbAdmin
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void _LocalDelegate17(_RawTuple2 arg0,_RawTuple0 arg1);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void _LocalDelegate22(_RawTuple4 arg0,_RawTuple0 arg1);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void _LocalDelegate27(_RawTuple0 arg0,_RawTuple0 arg1);
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void _LocalDelegate33(_RawTuple0 arg0,_RawTuple0 arg1);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void _LocalDelegate34(_RawTuple0 arg0,_RawTuple0 arg1);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void _LocalDelegate40(_RawTuple0 arg0,_RawTuple0 arg1);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void _LocalDelegate45(_RawTuple5 arg0,_RawTuple0 arg1);
         [StructLayout(LayoutKind.Sequential)]
         private struct _RawTuple0 {
             public _RawSlice elem0;
@@ -336,17 +420,17 @@ namespace AgentdbAdmin
         }
         [StructLayout(LayoutKind.Sequential)]
         private struct _RawTuple5 {
-            public long elem0;
+            public _StructDirectoryDesc elem0;
             public byte elem1;
         }
-        private static _RawTuple5 _EncodeOption<T>(T arg, Func<T, long> converter) {
+        private static _RawTuple5 _EncodeOption<T>(T arg, Func<T, _StructDirectoryDesc> converter) {
             if (arg != null) {
                 return new _RawTuple5 { elem0 = converter(arg), elem1 = 1 };
             } else {
-                return new _RawTuple5 { elem0 = default(long), elem1 = 0 };
+                return new _RawTuple5 { elem0 = default(_StructDirectoryDesc), elem1 = 0 };
             }
         }
-        private static T _DecodeOption<T>(_RawTuple5 arg, Func<long, T> converter) {
+        private static T _DecodeOption<T>(_RawTuple5 arg, Func<_StructDirectoryDesc, T> converter) {
             if (arg.elem1 != 0) {
                 return converter(arg.elem0);
             } else {
@@ -355,24 +439,43 @@ namespace AgentdbAdmin
         }
         [StructLayout(LayoutKind.Sequential)]
         private struct _RawTuple6 {
+            public long elem0;
+            public byte elem1;
+        }
+        private static _RawTuple6 _EncodeOption<T>(T arg, Func<T, long> converter) {
+            if (arg != null) {
+                return new _RawTuple6 { elem0 = converter(arg), elem1 = 1 };
+            } else {
+                return new _RawTuple6 { elem0 = default(long), elem1 = 0 };
+            }
+        }
+        private static T _DecodeOption<T>(_RawTuple6 arg, Func<long, T> converter) {
+            if (arg.elem1 != 0) {
+                return converter(arg.elem0);
+            } else {
+                return default(T);
+            }
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct _RawTuple7 {
             public uint elem0;
             public _StructPartitionDesc elem1;
         }
         [StructLayout(LayoutKind.Sequential)]
-        private struct _RawTuple7 {
+        private struct _RawTuple8 {
             public _RawOpaqueHandle elem0;
             public _RawSlice elem1;
             public byte elem2;
         }
-        private static _RawTuple7 _EncodeResult(Func<_RawOpaqueHandle> f) {
+        private static _RawTuple8 _EncodeResult(Func<_RawOpaqueHandle> f) {
             try {
                 var res = f();
-                return new _RawTuple7 { elem0 = res, elem1 = default(_RawSlice), elem2 = 1 };
+                return new _RawTuple8 { elem0 = res, elem1 = default(_RawSlice), elem2 = 1 };
             } catch (Exception e) {
-                return new _RawTuple7 { elem0 = default(_RawOpaqueHandle), elem1 = _AllocStr(e.Message), elem2 = 0 };
+                return new _RawTuple8 { elem0 = default(_RawOpaqueHandle), elem1 = _AllocStr(e.Message), elem2 = 0 };
             }
         }
-        private static T _DecodeResult<T>(_RawTuple7 arg, Func<_RawOpaqueHandle, T> converter) {
+        private static T _DecodeResult<T>(_RawTuple8 arg, Func<_RawOpaqueHandle, T> converter) {
             if (arg.elem2 != 0) {
                 return converter(arg.elem0);
             } else {

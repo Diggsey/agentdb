@@ -67,6 +67,27 @@ namespace AgentdbAdmin
             }
         }
 
+        public class DirectoryViewPageId : PageId
+        {
+            public List<string> Path { get; set; }
+            public override string Title => string.Join("/", Path) + ": Directory";
+
+            public override IViewTab CreateTab(ConnectionTab parent, AgentdbAdmin.IOpaqueHandle connectionHandle)
+            {
+                return new DirectoryViewTab(parent, connectionHandle, Path);
+            }
+
+            public override bool Equals(object obj)
+            {
+                return obj is DirectoryViewPageId id && EqualityComparer<List<string>>.Default.Equals(Path, id.Path);
+            }
+
+            public override int GetHashCode()
+            {
+                return -1490287827 + EqualityComparer<List<string>>.Default.GetHashCode(Path);
+            }
+        }
+
         public class BlobPageId : PageId
         {
             public string Root { get; set; }
@@ -249,16 +270,21 @@ namespace AgentdbAdmin
             }
         }
 
-        private async void fdbDirectoryView_BeforeExpand(object sender, TreeViewCancelEventArgs e)
+        private List<string> GetPathToNode(TreeNode node)
         {
             var path = new List<string>();
-            var node = e.Node;
             while (node != null)
             {
                 path.Add(node.Text);
                 node = node.Parent;
             }
             path.Reverse();
+            return path;
+        }
+
+        private async void fdbDirectoryView_BeforeExpand(object sender, TreeViewCancelEventArgs e)
+        {
+            var path = GetPathToNode(e.Node);
 
             var dirs = await MainForm.PerformAsync<List<string>>("Listing subdirectories", continuation =>
             {
@@ -271,6 +297,11 @@ namespace AgentdbAdmin
         private void fdbDirectoryView_AfterCollapse(object sender, TreeViewEventArgs e)
         {
             UnpopulateTreeNodes(e.Node.Nodes);
+        }
+
+        private void fdbDirectoryView_NodeMouseDoubleClick(object sender, TreeNodeMouseClickEventArgs e)
+        {
+            OpenPage(new DirectoryViewPageId { Path = GetPathToNode(e.Node) });
         }
     }
 

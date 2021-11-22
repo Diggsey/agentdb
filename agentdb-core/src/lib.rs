@@ -16,6 +16,7 @@ mod directories;
 mod error;
 mod message;
 mod partition;
+mod prepacked;
 mod typed_subspace;
 mod utils;
 
@@ -24,6 +25,7 @@ use client::{client_task, PartitionRange};
 pub use directories::Global;
 pub use error::Error;
 pub use message::send_messages;
+pub use prepacked::Prepacked;
 pub use typed_subspace::TypedSubspace;
 pub use utils::Timestamp;
 

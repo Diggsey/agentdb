@@ -65,6 +65,7 @@ pub(crate) struct RootSpace {
     pub(crate) user_dir: DirectoryOutput,
     pub(crate) clients: TypedSubspace<Uuid>,
     pub(crate) agents: TypedSubspace<Uuid>,
+    pub(crate) agent_counts: TypedSubspace<u32>,
     pub(crate) blob_modified: TypedSubspace<Uuid>,
     pub(crate) blob_data: TypedSubspace<(Uuid, u32)>,
     pub(crate) partition_range_send: Vec<u8>,
@@ -92,6 +93,8 @@ impl RootSpace {
                             .map_err(Error::from_dir)?;
                         let clients = TypedSubspace::open_or_create(tx, &dir, "clients").await?;
                         let agents = TypedSubspace::open_or_create(tx, &dir, "agents").await?;
+                        let agent_counts =
+                            TypedSubspace::open_or_create(tx, &dir, "agent_counts").await?;
                         let blob_modified =
                             TypedSubspace::open_or_create(tx, &dir, "blob_modified").await?;
                         let blob_data =
@@ -107,6 +110,7 @@ impl RootSpace {
                             user_dir,
                             clients,
                             agents,
+                            agent_counts,
                             blob_modified,
                             blob_data,
                             partition_range_send,
@@ -146,7 +150,6 @@ impl RootSpace {
 pub(crate) struct PartitionSpace {
     pub(crate) partition: u32,
     pub(crate) modified: Vec<u8>,
-    pub(crate) agent_count: Vec<u8>,
     pub(crate) message: TypedSubspace<(Timestamp, Versionstamp, u32)>,
     pub(crate) batch: TypedSubspace<(Uuid, Versionstamp)>,
     pub(crate) agent_retry: TypedSubspace<Uuid>,
@@ -171,7 +174,6 @@ impl PartitionSpace {
                             .await
                             .map_err(Error::from_dir)?;
                         let modified = dir.pack(&"modified".as_bytes());
-                        let agent_count = dir.pack(&"agent_count".as_bytes());
                         let message = TypedSubspace::open_or_create(tx, &dir, "message").await?;
                         let batch = TypedSubspace::open_or_create(tx, &dir, "batch").await?;
                         let agent_retry =
@@ -179,7 +181,6 @@ impl PartitionSpace {
                         Ok(Self {
                             partition,
                             modified,
-                            agent_count,
                             message,
                             batch,
                             agent_retry,

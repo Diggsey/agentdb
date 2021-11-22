@@ -186,6 +186,7 @@ namespace AgentdbAdmin
             this.fdbDirectoryView.TabIndex = 0;
             this.fdbDirectoryView.AfterCollapse += new System.Windows.Forms.TreeViewEventHandler(this.fdbDirectoryView_AfterCollapse);
             this.fdbDirectoryView.BeforeExpand += new System.Windows.Forms.TreeViewCancelEventHandler(this.fdbDirectoryView_BeforeExpand);
+            this.fdbDirectoryView.NodeMouseDoubleClick += new System.Windows.Forms.TreeNodeMouseClickEventHandler(this.fdbDirectoryView_NodeMouseDoubleClick);
             // 
             // ConnectionTab
             // 

@@ -11,7 +11,7 @@ namespace AgentdbAdmin
     {
         public static string StringifyBytes(IEnumerable<byte> keyData)
         {
-            return string.Concat(keyData.Select(b => (b >= 0x20 && b < 127 && b != '\\') ? ((char)b).ToString() : "\\x"));
+            return string.Concat(keyData.Select(b => (b >= 0x20 && b < 127 && b != '\\') ? ((char)b).ToString() : "\\x" + b.ToString("x2")));
         }
 
         public static string FormatCsv(IEnumerable<string> fields)

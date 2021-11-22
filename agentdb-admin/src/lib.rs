@@ -1,7 +1,13 @@
-use std::{collections::BTreeMap, future::Future, ops::Range, sync::Arc};
+use std::{collections::BTreeMap, fmt, future::Future, ops::Range, sync::Arc};
 
 use chrono::{DateTime, Utc};
-use foundationdb::{api::NetworkAutoStop, directory::Directory, TransactOption};
+use foundationdb::{
+    api::NetworkAutoStop,
+    directory::Directory,
+    options::StreamingMode,
+    tuple::{Element, Subspace},
+    RangeOption, TransactOption,
+};
 use futures::{stream::TryStreamExt, FutureExt};
 use lazy_static::lazy_static;
 use rnet::{net, Delegate2, Net, ToNet};
@@ -97,7 +103,6 @@ impl From<admin::MessageDesc> for MessageDesc {
 
 #[derive(Net)]
 pub struct PartitionDesc {
-    agent_count: i64,
     pending_messages: Vec<MessageDesc>,
     pending_messages_overflow: bool,
     batched_messages: Vec<MessageDesc>,
@@ -107,7 +112,6 @@ pub struct PartitionDesc {
 impl From<admin::PartitionDesc> for PartitionDesc {
     fn from(other: admin::PartitionDesc) -> Self {
         Self {
-            agent_count: other.agent_count(),
             pending_messages: other
                 .pending_messages()
                 .iter()
@@ -132,6 +136,7 @@ pub struct RootDesc {
     partition_range_send: Range<u32>,
     clients: Vec<ClientDesc>,
     partitions: BTreeMap<u32, PartitionDesc>,
+    agent_count: i64,
 }
 
 impl From<admin::RootDesc> for RootDesc {
@@ -145,6 +150,7 @@ impl From<admin::RootDesc> for RootDesc {
                 .iter()
                 .map(|(k, v)| (k.clone(), v.clone().into()))
                 .collect(),
+            agent_count: other.agent_count(),
         }
     }
 }
@@ -220,6 +226,101 @@ fn list_agents(
     });
 }
 
+#[derive(Net)]
+pub struct KeyValueDesc {
+    key_bytes: Vec<u8>,
+    key_decoded: Vec<String>,
+    value_bytes: Vec<u8>,
+}
+
+struct HexSlice<'a>(&'a [u8]);
+
+impl<'a> fmt::Display for HexSlice<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for &byte in self.0 {
+            write!(f, "{:0>2x}", byte)?;
+        }
+        Ok(())
+    }
+}
+
+fn element_to_string(element: &Element) -> String {
+    match element {
+        Element::Nil => "NULL".into(),
+        Element::Bytes(b) => HexSlice(b).to_string(),
+        Element::String(s) => format!("{:?}", s),
+        Element::Tuple(elems) => {
+            let parts: Vec<_> = elems.iter().map(element_to_string).collect();
+            format!("({})", parts.join(", "))
+        }
+        Element::Int(v) => v.to_string(),
+        Element::Float(v) => v.to_string(),
+        Element::Double(v) => v.to_string(),
+        Element::Bool(v) => v.to_string(),
+        Element::Uuid(v) => v.to_string(),
+        Element::Versionstamp(v) => format!("Versionstamp({})", HexSlice(v.as_bytes())),
+        Element::BigInt(v) => v.to_string(),
+    }
+}
+
+impl KeyValueDesc {
+    pub fn new(subspace: &Subspace, key: &[u8], value: &[u8]) -> Result<Self, Error> {
+        let elems: Vec<Element> = subspace.unpack(key)?;
+        Ok(Self {
+            key_bytes: key.into(),
+            key_decoded: elems.iter().map(element_to_string).collect(),
+            value_bytes: value.into(),
+        })
+    }
+}
+
+#[net]
+fn list_subspace(
+    con: Arc<Connection>,
+    prefix: Vec<u8>,
+    from: Vec<u8>,
+    limit: u32,
+    reverse: bool,
+    continuation: Continuation<Vec<KeyValueDesc>>,
+) {
+    wrap_async(continuation, async move {
+        con.global
+            .db()
+            .transact_boxed(
+                (from, prefix),
+                |tx, (from, prefix)| {
+                    async move {
+                        let subspace = Subspace::from_bytes(&prefix);
+                        let (mut start, mut end) = subspace.range();
+                        if reverse {
+                            if *from < end {
+                                end = from.clone();
+                            }
+                        } else {
+                            if *from > start {
+                                start = from.clone();
+                                start.push(0);
+                            }
+                        }
+                        let mut range: RangeOption = (start, end).into();
+                        range.limit = Some(limit as usize);
+                        range.mode = StreamingMode::WantAll;
+
+                        let values = tx.get_range(&range, 0, true).await?;
+
+                        values
+                            .into_iter()
+                            .map(|v| KeyValueDesc::new(&subspace, v.key(), v.value()))
+                            .collect()
+                    }
+                    .boxed()
+                },
+                TransactOption::idempotent(),
+            )
+            .await
+    });
+}
+
 #[net]
 fn list_directory(
     con: Arc<Connection>,
@@ -238,6 +339,45 @@ fn list_directory(
                             .list(tx, path.clone())
                             .await
                             .map_err(Error::from_dir)
+                    }
+                    .boxed()
+                },
+                TransactOption::idempotent(),
+            )
+            .await
+    });
+}
+
+#[derive(Net)]
+pub struct DirectoryDesc {
+    path: Vec<String>,
+    prefix: Vec<u8>,
+    layer: Vec<u8>,
+}
+
+#[net]
+fn open_directory(
+    con: Arc<Connection>,
+    path: Vec<String>,
+    continuation: Continuation<DirectoryDesc>,
+) {
+    wrap_async(continuation, async move {
+        con.global
+            .db()
+            .transact_boxed(
+                (con.global.clone(), path),
+                move |tx, (global, path)| {
+                    async move {
+                        let dir = global
+                            .dir()
+                            .open(tx, path.clone(), None)
+                            .await
+                            .map_err(Error::from_dir)?;
+                        Ok(DirectoryDesc {
+                            path: path.clone(),
+                            prefix: dir.bytes().into(),
+                            layer: dir.get_layer(),
+                        })
                     }
                     .boxed()
                 },

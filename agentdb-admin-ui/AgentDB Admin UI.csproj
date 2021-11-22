@@ -57,6 +57,12 @@
     <Compile Include="Modals\RepartitionModal.Designer.cs">
       <DependentUpon>RepartitionModal.cs</DependentUpon>
     </Compile>
+    <Compile Include="ViewTabs\DirectoryViewTab.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="ViewTabs\DirectoryViewTab.Designer.cs">
+      <DependentUpon>DirectoryViewTab.cs</DependentUpon>
+    </Compile>
     <Compile Include="ViewTabs\AgentListViewTab.cs">
       <SubType>UserControl</SubType>
     </Compile>
@@ -95,6 +101,9 @@
     <Compile Include="Utils.cs" />
     <EmbeddedResource Include="Modals\RepartitionModal.resx">
       <DependentUpon>RepartitionModal.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="ViewTabs\DirectoryViewTab.resx">
+      <DependentUpon>DirectoryViewTab.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="ViewTabs\AgentListViewTab.resx">
       <DependentUpon>AgentListViewTab.cs</DependentUpon>

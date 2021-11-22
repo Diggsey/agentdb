@@ -24,6 +24,7 @@ use crate::{
 };
 
 const MAX_POLL_INTERVAL_SECS: u64 = 120;
+const MAX_AGENT_COUNTS: u32 = 256;
 
 #[derive(Debug, thiserror::Error)]
 #[error("State function returned an error")]
@@ -310,8 +311,11 @@ impl PartitionState {
                                 -1
                             };
                             // Update partition agent count
+                            let agent_count_key = root
+                                .agent_counts
+                                .pack(&(partition.partition % MAX_AGENT_COUNTS));
                             tx.atomic_op(
-                                &partition.agent_count,
+                                &agent_count_key,
                                 &agent_count_delta.to_le_bytes(),
                                 MutationType::Add,
                             );

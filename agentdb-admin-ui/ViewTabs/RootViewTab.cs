@@ -52,6 +52,8 @@ namespace AgentdbAdmin
 
             lastActiveBox.Visible = client.HasValue;
             lastActiveLabel.Visible = client.HasValue;
+            agentCountBox.Visible = tag == null;
+            agentCountLabel.Visible = tag == null;
             sendPartitionBox.Visible = tag == null;
             sendPartitionLabel.Visible = tag == null;
             recvPartitionBox.Visible = tag == null;
@@ -89,6 +91,7 @@ namespace AgentdbAdmin
             }
             else if (rootDesc.partitions != null)
             {
+                agentCountBox.Text = rootDesc.agentCount.ToString();
                 detailsNameBox.Text = root;
                 detailsTypeBox.Text = "Root";
                 sendPartitionBox.Text = $"{rootDesc.partitionRangeSend.Item1} to {rootDesc.partitionRangeSend.Item2 - 1}";
@@ -104,7 +107,6 @@ namespace AgentdbAdmin
                 }
             }
 
-            long agentCount = 0;
             messagesView.BeginUpdate();
             messagesView.Items.Clear();
             bool didOverflow = false;
@@ -114,7 +116,6 @@ namespace AgentdbAdmin
                 if (rootDesc.partitions.TryGetValue(partitionIndex, out partitionDesc))
                 {
                     var partitionIndexStr = partitionIndex.ToString();
-                    agentCount += partitionDesc.agentCount;
 
                     foreach (var message in partitionDesc.batchedMessages)
                     {
@@ -157,8 +158,6 @@ namespace AgentdbAdmin
                 messagesView.Items.Add(item);
             }
             messagesView.EndUpdate();
-
-            agentCountBox.Text = agentCount.ToString();
 
             detailsTableLayout.ResumeLayout();
         }

@@ -106,7 +106,6 @@ impl MessageDesc {
 
 #[derive(Debug, Clone)]
 pub struct PartitionDesc {
-    agent_count: i64,
     pending_messages: Vec<MessageDesc>,
     pending_messages_overflow: bool,
     batched_messages: Vec<MessageDesc>,
@@ -114,9 +113,6 @@ pub struct PartitionDesc {
 }
 
 impl PartitionDesc {
-    pub fn agent_count(&self) -> i64 {
-        self.agent_count
-    }
     pub fn pending_messages(&self) -> &[MessageDesc] {
         &self.pending_messages
     }
@@ -137,6 +133,7 @@ pub struct RootDesc {
     partition_range_send: Range<u32>,
     clients: Vec<ClientDesc>,
     partitions: BTreeMap<u32, PartitionDesc>,
+    agent_count: i64,
 }
 
 impl RootDesc {
@@ -151,6 +148,9 @@ impl RootDesc {
     }
     pub fn partitions(&self) -> &BTreeMap<u32, PartitionDesc> {
         &self.partitions
+    }
+    pub fn agent_count(&self) -> i64 {
+        self.agent_count
     }
 }
 
@@ -194,11 +194,6 @@ async fn describe_partition(
     tx: &Transaction,
     partition: &PartitionSpace,
 ) -> Result<PartitionDesc, Error> {
-    let agent_count_bytes = tx.get(&partition.agent_count, true).await?;
-    let agent_count = agent_count_bytes
-        .map(|slice| LittleEndian::read_i64(&slice))
-        .unwrap_or(0);
-
     // Load pending messages
     let mut pending_messages_range: RangeOption = partition.message.range().into();
     pending_messages_range.limit = Some(DESC_LIMIT);
@@ -244,7 +239,6 @@ async fn describe_partition(
     }
 
     Ok(PartitionDesc {
-        agent_count,
         pending_messages,
         pending_messages_overflow,
         batched_messages,
@@ -273,6 +267,18 @@ fn convert_range(range: PartitionRange) -> Range<u32> {
     range.offset..(range.offset + range.count)
 }
 
+async fn calculate_agent_count(tx: &Transaction, root: &RootSpace) -> Result<i64, Error> {
+    let agent_count_range: RangeOption = root.agent_counts.range().into();
+    let mut stream = tx.get_ranges(agent_count_range, true);
+    let mut agent_count = 0;
+    while let Some(item) = stream.try_next().await? {
+        for value in item {
+            agent_count += LittleEndian::read_i64(value.value());
+        }
+    }
+    Ok(agent_count)
+}
+
 pub async fn describe_root(global: &Global, root: &str) -> Result<RootDesc, Error> {
     let root = global.root(root).await?;
     global
@@ -296,11 +302,14 @@ pub async fn describe_root(global: &Global, root: &str) -> Result<RootDesc, Erro
                     )
                     .await?;
 
+                    let agent_count = calculate_agent_count(tx, &root).await?;
+
                     Ok(RootDesc {
                         partition_range_send: convert_range(partition_range_send),
                         partition_range_recv: convert_range(partition_range_recv),
                         clients,
                         partitions,
+                        agent_count,
                     })
                 }
                 .boxed()

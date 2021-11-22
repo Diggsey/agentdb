@@ -30,7 +30,7 @@ impl Construct for MyMessage {
     ) -> Result<Option<MyAgent>, Error> {
         context.send(
             MY_INDEX,
-            agent_index::Update::add(self.value.clone().into_bytes(), ref_.into()),
+            agent_index::Update::add(Prepacked::new(&self.value), ref_.into()),
         )?;
         Ok(Some(MyAgent { value: self.value }))
     }
@@ -48,8 +48,8 @@ impl Handle<MyMessage> for MyAgent {
         context.send(
             MY_INDEX,
             agent_index::Update::update(
-                old_value.into_bytes(),
-                self.value.clone().into_bytes(),
+                Prepacked::new(&old_value),
+                Prepacked::new(&self.value),
                 ref_.into(),
             ),
         )?;

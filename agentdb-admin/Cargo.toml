@@ -7,16 +7,13 @@ edition = "2018"
 crate-type = ["cdylib"]
 
 [dependencies]
-foundationdb = { version = "0.5.0", features = [
+foundationdb = { git = "https://github.com/Diggsey/foundationdb-rs.git", branch = "agentdb-fork", features = [
     "embedded-fdb-include",
-], path = "../../foundationdb-rs/foundationdb" }
+] }
 agentdb-core = { path = "../agentdb-core" }
 tokio = { version = "1.12.0", features = ["full"] }
 anyhow = "1.0.44"
-rnet = { version = "0.1.0", path = "../../rnet/rnet", features = [
-    "uuid",
-    "chrono",
-] }
+rnet = { version = "0.2.0", features = ["uuid", "chrono"] }
 linkme = "0.2.7"
 lazy_static = "1.4.0"
 futures = "0.3.17"

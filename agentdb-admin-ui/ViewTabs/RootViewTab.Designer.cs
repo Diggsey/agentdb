@@ -31,13 +31,12 @@ namespace AgentdbAdmin
         {
             this.components = new System.ComponentModel.Container();
             System.Windows.Forms.SplitContainer splitContainer;
-            System.Windows.Forms.TreeNode treeNode1 = new System.Windows.Forms.TreeNode("Overview");
-            System.Windows.Forms.TreeNode treeNode2 = new System.Windows.Forms.TreeNode("Clients");
-            System.Windows.Forms.TreeNode treeNode3 = new System.Windows.Forms.TreeNode("Partitions");
+            System.Windows.Forms.TreeNode treeNode4 = new System.Windows.Forms.TreeNode("Overview");
+            System.Windows.Forms.TreeNode treeNode5 = new System.Windows.Forms.TreeNode("Clients");
+            System.Windows.Forms.TreeNode treeNode6 = new System.Windows.Forms.TreeNode("Partitions");
             System.Windows.Forms.TableLayoutPanel rightPaneTableLayout;
             System.Windows.Forms.GroupBox aggregatedGroupBox;
             System.Windows.Forms.Label messagesLabel;
-            System.Windows.Forms.Label agentCountLabel;
             System.Windows.Forms.Label includedPartitionsLabel;
             System.Windows.Forms.ToolStripSeparator messageCtxMenuSeparator;
             System.Windows.Forms.GroupBox detailsGroupBox;
@@ -45,7 +44,6 @@ namespace AgentdbAdmin
             System.Windows.Forms.Label detailsNameLabel;
             this.treeView = new System.Windows.Forms.TreeView();
             this.aggregatedTableLayout = new System.Windows.Forms.TableLayoutPanel();
-            this.agentCountBox = new System.Windows.Forms.TextBox();
             this.includedPartitionsBox = new System.Windows.Forms.TextBox();
             this.messagesView = new System.Windows.Forms.ListView();
             this.messagesPartitionColumn = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
@@ -72,11 +70,12 @@ namespace AgentdbAdmin
             this.actionsFlowLayout = new System.Windows.Forms.FlowLayoutPanel();
             this.repartitionButton = new System.Windows.Forms.Button();
             this.listAgentsButton = new System.Windows.Forms.Button();
+            this.agentCountLabel = new System.Windows.Forms.Label();
+            this.agentCountBox = new System.Windows.Forms.TextBox();
             splitContainer = new System.Windows.Forms.SplitContainer();
             rightPaneTableLayout = new System.Windows.Forms.TableLayoutPanel();
             aggregatedGroupBox = new System.Windows.Forms.GroupBox();
             messagesLabel = new System.Windows.Forms.Label();
-            agentCountLabel = new System.Windows.Forms.Label();
             includedPartitionsLabel = new System.Windows.Forms.Label();
             messageCtxMenuSeparator = new System.Windows.Forms.ToolStripSeparator();
             detailsGroupBox = new System.Windows.Forms.GroupBox();
@@ -119,16 +118,16 @@ namespace AgentdbAdmin
             this.treeView.Dock = System.Windows.Forms.DockStyle.Fill;
             this.treeView.Location = new System.Drawing.Point(0, 0);
             this.treeView.Name = "treeView";
-            treeNode1.Name = "OverviewNode";
-            treeNode1.Text = "Overview";
-            treeNode2.Name = "ClientsNode";
-            treeNode2.Text = "Clients";
-            treeNode3.Name = "PartitionsNode";
-            treeNode3.Text = "Partitions";
+            treeNode4.Name = "OverviewNode";
+            treeNode4.Text = "Overview";
+            treeNode5.Name = "ClientsNode";
+            treeNode5.Text = "Clients";
+            treeNode6.Name = "PartitionsNode";
+            treeNode6.Text = "Partitions";
             this.treeView.Nodes.AddRange(new System.Windows.Forms.TreeNode[] {
-            treeNode1,
-            treeNode2,
-            treeNode3});
+            treeNode4,
+            treeNode5,
+            treeNode6});
             this.treeView.Size = new System.Drawing.Size(251, 543);
             this.treeView.TabIndex = 0;
             this.treeView.AfterSelect += new System.Windows.Forms.TreeViewEventHandler(this.treeView_AfterSelect);
@@ -155,9 +154,9 @@ namespace AgentdbAdmin
             aggregatedGroupBox.Controls.Add(this.aggregatedTableLayout);
             aggregatedGroupBox.Dock = System.Windows.Forms.DockStyle.Fill;
             aggregatedGroupBox.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(254)));
-            aggregatedGroupBox.Location = new System.Drawing.Point(3, 201);
+            aggregatedGroupBox.Location = new System.Drawing.Point(3, 226);
             aggregatedGroupBox.Name = "aggregatedGroupBox";
-            aggregatedGroupBox.Size = new System.Drawing.Size(588, 321);
+            aggregatedGroupBox.Size = new System.Drawing.Size(588, 296);
             aggregatedGroupBox.TabIndex = 0;
             aggregatedGroupBox.TabStop = false;
             aggregatedGroupBox.Text = "Aggregated";
@@ -168,22 +167,20 @@ namespace AgentdbAdmin
             this.aggregatedTableLayout.ColumnCount = 2;
             this.aggregatedTableLayout.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
             this.aggregatedTableLayout.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.aggregatedTableLayout.Controls.Add(messagesLabel, 0, 2);
-            this.aggregatedTableLayout.Controls.Add(this.agentCountBox, 1, 1);
-            this.aggregatedTableLayout.Controls.Add(agentCountLabel, 0, 1);
+            this.aggregatedTableLayout.Controls.Add(messagesLabel, 0, 1);
             this.aggregatedTableLayout.Controls.Add(includedPartitionsLabel, 0, 0);
             this.aggregatedTableLayout.Controls.Add(this.includedPartitionsBox, 1, 0);
-            this.aggregatedTableLayout.Controls.Add(this.messagesView, 0, 3);
+            this.aggregatedTableLayout.Controls.Add(this.messagesView, 0, 2);
             this.aggregatedTableLayout.Dock = System.Windows.Forms.DockStyle.Fill;
             this.aggregatedTableLayout.Location = new System.Drawing.Point(3, 22);
             this.aggregatedTableLayout.Name = "aggregatedTableLayout";
-            this.aggregatedTableLayout.RowCount = 5;
-            this.aggregatedTableLayout.RowStyles.Add(new System.Windows.Forms.RowStyle());
+            this.aggregatedTableLayout.RowCount = 4;
             this.aggregatedTableLayout.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.aggregatedTableLayout.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.aggregatedTableLayout.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.aggregatedTableLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 20F));
-            this.aggregatedTableLayout.Size = new System.Drawing.Size(582, 296);
+            this.aggregatedTableLayout.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 20F));
+            this.aggregatedTableLayout.Size = new System.Drawing.Size(582, 271);
             this.aggregatedTableLayout.TabIndex = 1;
             // 
             // messagesLabel
@@ -192,35 +189,12 @@ namespace AgentdbAdmin
             this.aggregatedTableLayout.SetColumnSpan(messagesLabel, 2);
             messagesLabel.Dock = System.Windows.Forms.DockStyle.Fill;
             messagesLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(254)));
-            messagesLabel.Location = new System.Drawing.Point(3, 50);
+            messagesLabel.Location = new System.Drawing.Point(3, 25);
             messagesLabel.Name = "messagesLabel";
             messagesLabel.Size = new System.Drawing.Size(576, 20);
             messagesLabel.TabIndex = 4;
             messagesLabel.Text = "In-flight messages:";
             messagesLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            // 
-            // agentCountBox
-            // 
-            this.agentCountBox.BorderStyle = System.Windows.Forms.BorderStyle.None;
-            this.agentCountBox.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.agentCountBox.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(254)));
-            this.agentCountBox.Location = new System.Drawing.Point(152, 28);
-            this.agentCountBox.Name = "agentCountBox";
-            this.agentCountBox.ReadOnly = true;
-            this.agentCountBox.Size = new System.Drawing.Size(427, 19);
-            this.agentCountBox.TabIndex = 3;
-            // 
-            // agentCountLabel
-            // 
-            agentCountLabel.AutoSize = true;
-            agentCountLabel.Dock = System.Windows.Forms.DockStyle.Fill;
-            agentCountLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(254)));
-            agentCountLabel.Location = new System.Drawing.Point(3, 25);
-            agentCountLabel.Name = "agentCountLabel";
-            agentCountLabel.Size = new System.Drawing.Size(143, 25);
-            agentCountLabel.TabIndex = 2;
-            agentCountLabel.Text = "Agent count";
-            agentCountLabel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             // 
             // includedPartitionsLabel
             // 
@@ -259,7 +233,7 @@ namespace AgentdbAdmin
             this.messagesView.Font = new System.Drawing.Font("Consolas", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.messagesView.FullRowSelect = true;
             this.messagesView.HideSelection = false;
-            this.messagesView.Location = new System.Drawing.Point(3, 73);
+            this.messagesView.Location = new System.Drawing.Point(3, 48);
             this.messagesView.Name = "messagesView";
             this.messagesView.Size = new System.Drawing.Size(576, 200);
             this.messagesView.TabIndex = 5;
@@ -358,7 +332,7 @@ namespace AgentdbAdmin
             detailsGroupBox.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(254)));
             detailsGroupBox.Location = new System.Drawing.Point(3, 3);
             detailsGroupBox.Name = "detailsGroupBox";
-            detailsGroupBox.Size = new System.Drawing.Size(588, 192);
+            detailsGroupBox.Size = new System.Drawing.Size(588, 217);
             detailsGroupBox.TabIndex = 1;
             detailsGroupBox.TabStop = false;
             detailsGroupBox.Text = "Details";
@@ -369,7 +343,9 @@ namespace AgentdbAdmin
             this.detailsTableLayout.ColumnCount = 2;
             this.detailsTableLayout.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle());
             this.detailsTableLayout.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.detailsTableLayout.Controls.Add(this.actionsLabel, 0, 5);
+            this.detailsTableLayout.Controls.Add(this.agentCountBox, 0, 5);
+            this.detailsTableLayout.Controls.Add(this.agentCountLabel, 0, 5);
+            this.detailsTableLayout.Controls.Add(this.actionsLabel, 0, 6);
             this.detailsTableLayout.Controls.Add(this.recvPartitionBox, 1, 4);
             this.detailsTableLayout.Controls.Add(this.recvPartitionLabel, 0, 4);
             this.detailsTableLayout.Controls.Add(this.sendPartitionBox, 1, 3);
@@ -380,18 +356,19 @@ namespace AgentdbAdmin
             this.detailsTableLayout.Controls.Add(detailsTypeLabel, 0, 1);
             this.detailsTableLayout.Controls.Add(detailsNameLabel, 0, 0);
             this.detailsTableLayout.Controls.Add(this.detailsNameBox, 1, 0);
-            this.detailsTableLayout.Controls.Add(this.actionsFlowLayout, 1, 5);
+            this.detailsTableLayout.Controls.Add(this.actionsFlowLayout, 1, 6);
             this.detailsTableLayout.Dock = System.Windows.Forms.DockStyle.Fill;
             this.detailsTableLayout.Location = new System.Drawing.Point(3, 22);
             this.detailsTableLayout.Name = "detailsTableLayout";
-            this.detailsTableLayout.RowCount = 6;
+            this.detailsTableLayout.RowCount = 7;
             this.detailsTableLayout.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.detailsTableLayout.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.detailsTableLayout.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.detailsTableLayout.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.detailsTableLayout.RowStyles.Add(new System.Windows.Forms.RowStyle());
             this.detailsTableLayout.RowStyles.Add(new System.Windows.Forms.RowStyle());
-            this.detailsTableLayout.Size = new System.Drawing.Size(582, 167);
+            this.detailsTableLayout.RowStyles.Add(new System.Windows.Forms.RowStyle());
+            this.detailsTableLayout.Size = new System.Drawing.Size(582, 192);
             this.detailsTableLayout.TabIndex = 0;
             // 
             // actionsLabel
@@ -399,7 +376,7 @@ namespace AgentdbAdmin
             this.actionsLabel.AutoSize = true;
             this.actionsLabel.Dock = System.Windows.Forms.DockStyle.Fill;
             this.actionsLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(254)));
-            this.actionsLabel.Location = new System.Drawing.Point(3, 125);
+            this.actionsLabel.Location = new System.Drawing.Point(3, 150);
             this.actionsLabel.Name = "actionsLabel";
             this.actionsLabel.Size = new System.Drawing.Size(176, 42);
             this.actionsLabel.TabIndex = 11;
@@ -528,7 +505,7 @@ namespace AgentdbAdmin
             this.actionsFlowLayout.Controls.Add(this.listAgentsButton);
             this.actionsFlowLayout.Dock = System.Windows.Forms.DockStyle.Fill;
             this.actionsFlowLayout.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(254)));
-            this.actionsFlowLayout.Location = new System.Drawing.Point(185, 128);
+            this.actionsFlowLayout.Location = new System.Drawing.Point(185, 153);
             this.actionsFlowLayout.Name = "actionsFlowLayout";
             this.actionsFlowLayout.Size = new System.Drawing.Size(394, 36);
             this.actionsFlowLayout.TabIndex = 10;
@@ -554,6 +531,29 @@ namespace AgentdbAdmin
             this.listAgentsButton.Text = "List agents";
             this.listAgentsButton.UseVisualStyleBackColor = true;
             this.listAgentsButton.Click += new System.EventHandler(this.listAgentsButton_Click);
+            // 
+            // agentCountLabel
+            // 
+            this.agentCountLabel.AutoSize = true;
+            this.agentCountLabel.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.agentCountLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(254)));
+            this.agentCountLabel.Location = new System.Drawing.Point(3, 125);
+            this.agentCountLabel.Name = "agentCountLabel";
+            this.agentCountLabel.Size = new System.Drawing.Size(176, 25);
+            this.agentCountLabel.TabIndex = 12;
+            this.agentCountLabel.Text = "Agent count";
+            this.agentCountLabel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            // 
+            // agentCountBox
+            // 
+            this.agentCountBox.BorderStyle = System.Windows.Forms.BorderStyle.None;
+            this.agentCountBox.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.agentCountBox.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(254)));
+            this.agentCountBox.Location = new System.Drawing.Point(185, 128);
+            this.agentCountBox.Name = "agentCountBox";
+            this.agentCountBox.ReadOnly = true;
+            this.agentCountBox.Size = new System.Drawing.Size(394, 19);
+            this.agentCountBox.TabIndex = 13;
             // 
             // RootViewTab
             // 
@@ -587,7 +587,6 @@ namespace AgentdbAdmin
         #endregion
         private System.Windows.Forms.TreeView treeView;
         private System.Windows.Forms.TableLayoutPanel aggregatedTableLayout;
-        private System.Windows.Forms.TextBox agentCountBox;
         private System.Windows.Forms.TextBox includedPartitionsBox;
         private System.Windows.Forms.ListView messagesView;
         private System.Windows.Forms.ColumnHeader messagesScheduledForColumn;
@@ -614,5 +613,7 @@ namespace AgentdbAdmin
         private System.Windows.Forms.FlowLayoutPanel actionsFlowLayout;
         private System.Windows.Forms.Button repartitionButton;
         private System.Windows.Forms.Button listAgentsButton;
+        private System.Windows.Forms.TextBox agentCountBox;
+        private System.Windows.Forms.Label agentCountLabel;
     }
 }

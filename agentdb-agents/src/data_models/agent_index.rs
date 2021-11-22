@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::Notify;
 
-type IndexSpace = TypedSubspace<(Vec<u8>, String, Uuid)>;
+type IndexSpace = TypedSubspace<(Prepacked, String, Uuid)>;
 
 // Effect agent which will automatically retry a callback
 #[agent(name = "adb.data_models.agent_index")]
@@ -50,8 +50,8 @@ pub struct StatResponse {
 
 #[derive(Serialize, Deserialize)]
 pub enum UpdateOp {
-    Add { key: Vec<u8>, value: DynAgentRef },
-    Remove { key: Vec<u8>, value: DynAgentRef },
+    Add { key: Prepacked, value: DynAgentRef },
+    Remove { key: Prepacked, value: DynAgentRef },
 }
 
 // Message to update the index
@@ -63,19 +63,19 @@ pub struct Update {
 }
 
 impl Update {
-    pub fn add(key: Vec<u8>, value: DynAgentRef) -> Self {
+    pub fn add(key: Prepacked, value: DynAgentRef) -> Self {
         Self {
             ops: vec![UpdateOp::Add { key, value }],
             notify: Notify::none(),
         }
     }
-    pub fn remove(key: Vec<u8>, value: DynAgentRef) -> Self {
+    pub fn remove(key: Prepacked, value: DynAgentRef) -> Self {
         Self {
             ops: vec![UpdateOp::Remove { key, value }],
             notify: Notify::none(),
         }
     }
-    pub fn update(old_key: Vec<u8>, new_key: Vec<u8>, value: DynAgentRef) -> Self {
+    pub fn update(old_key: Prepacked, new_key: Prepacked, value: DynAgentRef) -> Self {
         Self {
             ops: vec![
                 UpdateOp::Remove {
@@ -99,7 +99,7 @@ impl Update {
 pub struct QueryExact {
     pub query_id: Uuid,
     pub caller: DynAgentRef,
-    pub keys: Vec<Vec<u8>>,
+    pub keys: Vec<Prepacked>,
 }
 
 // Response from an exact query. Values will be in the same order
@@ -113,7 +113,7 @@ pub struct QueryExactResponse {
 
 #[derive(Serialize, Deserialize)]
 pub struct QueryRangeSelector {
-    pub key: Vec<u8>,
+    pub key: Prepacked,
     pub inclusive: bool,
 }
 
@@ -152,11 +152,11 @@ pub struct QueryRange {
 #[derive(Serialize, Deserialize)]
 pub struct QueryRangeResponse {
     pub query_id: Uuid,
-    pub results: Vec<(Vec<u8>, DynAgentRef)>,
+    pub results: Vec<(Prepacked, DynAgentRef)>,
 }
 
 impl AgentIndex {
-    fn index_key(&self, key: Vec<u8>, value: DynAgentRef) -> Vec<u8> {
+    fn index_key(&self, key: Prepacked, value: DynAgentRef) -> Vec<u8> {
         self.index_space
             .pack(&(key, value.root().to_string(), value.id()))
     }
