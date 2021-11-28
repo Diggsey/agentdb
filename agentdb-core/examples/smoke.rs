@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use agentdb_core::{Global, MessageToSend, StateFnInput, StateFnOutput, Timestamp};
+use agentdb_core::{Global, OutboundMessage, StateFnInput, StateFnOutput, Timestamp};
 use foundationdb::TransactOption;
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
@@ -33,7 +33,7 @@ async fn state_fn(input: StateFnInput<'_>) -> Result<StateFnOutput, ()> {
     match &mut state {
         Agent::Hello(hello_state) => {
             for msg in input.messages {
-                let msg = postcard::from_bytes(&msg).unwrap();
+                let msg = postcard::from_bytes(&msg.data).unwrap();
                 match msg {
                     Message::Hello(s) => {
                         hello_state.count += 1;
@@ -62,9 +62,10 @@ async fn say_hello(global: &Global, id: Uuid, from: &str) -> anyhow::Result<()> 
                     agentdb_core::send_messages(
                         tx,
                         global,
-                        &[MessageToSend {
+                        &[OutboundMessage {
                             recipient_root: ROOT.into(),
                             recipient_id: id,
+                            operation_id: Uuid::new_v4(),
                             when: Timestamp::now(),
                             content,
                         }],

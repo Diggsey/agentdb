@@ -110,19 +110,24 @@ pub async fn load_partition_range(
         .unwrap_or(DEFAULT_PARTITION_RANGE))
 }
 
+/// Timestamp type used by AgentDB. Represents a real time.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Timestamp(DateTime<Utc>);
 
 impl Timestamp {
+    /// Zero timestamp is used to indicate that a message should be sent immediately.
     pub fn zero() -> Self {
         Self::from_millis(0)
     }
+    /// Current timestamp.
     pub fn now() -> Self {
         Self(Utc::now())
     }
+    /// Convert the timestamp to milliseconds since an arbitrary epoch.
     pub fn millis(self) -> i64 {
         self.0.timestamp_millis()
     }
+    /// Convert from milliseconds since an arbitrary epoch to a timestamp.
     pub fn from_millis(ms: i64) -> Self {
         Self(Utc.timestamp_millis(ms))
     }

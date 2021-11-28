@@ -1,3 +1,5 @@
+//! Utilities to allow asynchronous tasks to be cancelled.
+
 use std::{
     future::Future,
     pin::Pin,
@@ -11,12 +13,16 @@ use tokio::{
     task::{JoinError, JoinHandle},
 };
 
+/// A future which completes when the corresponding `CancellationHandle` is dropped
+/// or explicitly cancelled. The future can be cloned to allow multiple subtasks
+/// to respond to the same cancellation event.
 pub struct Cancellation {
     inner: Arc<RwLock<bool>>,
     fut: Pin<Box<dyn Future<Output = OwnedRwLockReadGuard<bool>> + Send + Sync>>,
 }
 
 impl Cancellation {
+    /// Returns `true` if the `CancellationHandle` has been dropped or explicitly cancelled.
     pub fn is_cancelled(&self) -> bool {
         matches!(self.inner.try_read(), Ok(x) if *x)
     }
@@ -48,15 +54,21 @@ impl FusedFuture for Cancellation {
     }
 }
 
+/// A handle to a cancellable task which will (if it completes) will return
+/// a value of type `T`.
 pub struct CancellableHandle<T> {
     guard: Option<OwnedRwLockWriteGuard<bool>>,
     inner: JoinHandle<T>,
 }
 
 impl<T> CancellableHandle<T> {
+    /// Explicitly cancel the task. The task may still complete successfully if it
+    /// completes before receiving the cancellation signal.
     pub fn cancel(&mut self) {
         self.guard.take();
     }
+    /// Drop the cancellation handle without triggering cancellation. Returns a normal
+    /// `JoinHandle<T>`.
     pub fn forget(self) -> JoinHandle<T> {
         let Self { guard, inner } = self;
         if let Some(mut guard) = guard {
@@ -75,6 +87,8 @@ impl<T> Future for CancellableHandle<T> {
     }
 }
 
+/// Spawn a cancellable task. The provided closure will receive a `Cancellation` future
+/// which it can select on to be notified of cancellation.
 pub fn spawn_cancellable<T: Send + 'static, F: Future<Output = T> + Send + 'static>(
     f: impl FnOnce(Cancellation) -> F,
 ) -> CancellableHandle<T> {

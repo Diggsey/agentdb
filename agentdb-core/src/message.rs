@@ -1,5 +1,7 @@
 use std::collections::{hash_map, HashMap, HashSet};
 
+use anyhow::anyhow;
+use byteorder::{ByteOrder, LittleEndian};
 use foundationdb::{options::MutationType, tuple::Versionstamp, Transaction};
 use uuid::Uuid;
 
@@ -9,17 +11,26 @@ use crate::{
     error::Error,
     partition::mark_partition_modified,
     utils::{load_partition_range, partition_for_recipient},
-    MessageHeader, MessageToSend,
+    MessageHeader, OutboundMessage, Timestamp,
 };
 
+// Don't let any single operation exceed one message per second over long time scales.
+pub(crate) const MS_PER_MSG_PER_OP: i64 = 1000;
+// Cannot "burst" more than 1000 messages per operation.
+const MAX_MSG_BURST: i64 = 1000;
+
+pub(crate) const INITIAL_TS_OFFSET: i64 = MS_PER_MSG_PER_OP * MAX_MSG_BURST;
+
+/// Send messages into the AgentDB system.
 pub async fn send_messages(
     tx: &Transaction,
     global: &Global,
-    msgs: &[MessageToSend],
+    msgs: &[OutboundMessage],
     user_version: u16,
 ) -> Result<(), Error> {
     let mut partition_counts = HashMap::new();
     let mut partition_modified = HashSet::new();
+    let mut operations = HashMap::<_, i64>::new();
 
     for (idx, msg) in msgs.into_iter().enumerate() {
         let recipient_root = global.root(&msg.recipient_root).await?;
@@ -30,11 +41,15 @@ pub async fn send_messages(
                 load_partition_range(tx, &recipient_root.partition_range_send, false).await?,
             ),
         };
+        *operations
+            .entry((&msg.recipient_root, msg.operation_id))
+            .or_default() += 1;
 
         let msg_id = Uuid::new_v4();
         blob::store_internal(tx, &recipient_root, msg_id, &msg.content);
         let msg_hdr = postcard::to_stdvec(&MessageHeader {
             recipient_id: msg.recipient_id,
+            operation_id: msg.operation_id,
             blob_id: msg_id,
         })?;
 
@@ -51,6 +66,33 @@ pub async fn send_messages(
         if partition_modified.insert((&msg.recipient_root, partition_idx)) {
             mark_partition_modified(tx, &partition);
         }
+    }
+
+    // Make sure all the involved operations have sufficient budget to continue
+    let current_ts = Timestamp::now().millis();
+    let initial_operation_ts = current_ts - INITIAL_TS_OFFSET;
+    for ((recipient_root, operation_id), count) in operations {
+        let root = global.root(recipient_root).await?;
+        let key = root.operation_ts.pack(&operation_id);
+        let operation_ts = tx
+            .get(&key, true)
+            .await?
+            .map(|slice| LittleEndian::read_i64(&slice))
+            .unwrap_or(initial_operation_ts);
+        let allowed_count = (current_ts - operation_ts) / MS_PER_MSG_PER_OP;
+        if allowed_count < count {
+            return Err(Error(anyhow!(
+                "Budget exceeded for operation {}",
+                operation_id
+            )));
+        }
+
+        tx.atomic_op(&key, &initial_operation_ts.to_le_bytes(), MutationType::Max);
+        tx.atomic_op(
+            &key,
+            &(count * MS_PER_MSG_PER_OP).to_le_bytes(),
+            MutationType::Add,
+        );
     }
 
     Ok(())

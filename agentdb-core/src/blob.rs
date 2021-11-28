@@ -1,3 +1,7 @@
+//! Contains functions for reading and writing "blobs", or binary large objects.
+//!
+//! Agent state and messages are all stored as blobs by AgentDB.
+
 use std::sync::Arc;
 
 use foundationdb::{
@@ -115,6 +119,7 @@ pub(crate) fn watch_stream_internal(
     })
 }
 
+/// Load a blob. Returns `None` if the blob does not exist.
 pub async fn load(
     tx: &Transaction,
     global: &Global,
@@ -126,6 +131,7 @@ pub async fn load(
     load_internal(tx, &root, blob_id, snapshot).await
 }
 
+/// Store a blob. Will overwrite any existing blob with this ID.
 pub async fn store(
     tx: &Transaction,
     global: &Global,
@@ -138,6 +144,7 @@ pub async fn store(
     Ok(())
 }
 
+/// Delete a blob. Will have no effect if the blob does not exist.
 pub async fn delete(
     tx: &Transaction,
     global: &Global,
@@ -149,6 +156,8 @@ pub async fn delete(
     Ok(())
 }
 
+/// Watch for changes to a blob. The returned future will resolve when
+/// the blob first changes.
 pub async fn watch(
     tx: &Transaction,
     global: &Global,
@@ -159,6 +168,11 @@ pub async fn watch(
     Ok(watch_internal(tx, &root, blob_id))
 }
 
+/// Watch for multiple changes to a blob. The returned stream will yield
+/// an item whenever the blob is changed. If the blob is changed multiple
+/// times in quick succession, it is not guaranteed that an item will be
+/// returned for every change, but at least one item will be returned after
+/// the last change.
 pub fn watch_stream(
     global: Arc<Global>,
     root: &str,

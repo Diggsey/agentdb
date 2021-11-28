@@ -6,6 +6,7 @@ use foundationdb::tuple::{
 };
 use serde::{Deserialize, Serialize};
 
+/// Stores arbitrary data which has already been packed into a FoundationDB tuple.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Prepacked(pub Vec<u8>);
 
@@ -13,9 +14,11 @@ const NIL: u8 = 0x00;
 const NESTED: u8 = 0x05;
 
 impl Prepacked {
+    /// Pack the given value.
     pub fn new<T: TuplePack>(value: &T) -> Self {
         Self(pack(value))
     }
+    /// Unpack into the desired type.
     pub fn unpack<'de, T: TupleUnpack<'de>>(&'de self) -> Result<T, PackError> {
         unpack(&self.0)
     }

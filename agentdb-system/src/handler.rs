@@ -3,6 +3,7 @@ use std::any::TypeId;
 use agentdb_core::Error;
 use async_trait::async_trait;
 use futures::future::BoxFuture;
+use futures::FutureExt;
 
 use crate::agent::Agent;
 use crate::agent_ref::{AgentRef, DynAgentRef};
@@ -41,8 +42,16 @@ where
         Self {
             type_id: TypeId::of::<A>(),
             handle_fn: |state: &mut dyn Agent, ref_, message, context| {
-                let state: &mut A = state.downcast_mut().expect("Agent of the correct type");
-                state.handle(ref_.unchecked_downcast(), message, context)
+                async move {
+                    if A::is_frangible() {
+                        context.require_clearance().await?;
+                    }
+                    let state: &mut A = state.downcast_mut().expect("Agent of the correct type");
+                    state
+                        .handle(ref_.unchecked_downcast(), message, context)
+                        .await
+                }
+                .boxed()
             },
         }
     }

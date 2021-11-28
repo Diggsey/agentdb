@@ -1,3 +1,7 @@
+//! The admin module contains functions for performing various administrative
+//! tasks, such as locating AgentDB roots within a FoundationDB cluster, obtaining
+//! statistical information about an AgentDB root, etc.
+
 use std::{
     collections::{btree_map::Entry, BTreeMap},
     ops::Range,
@@ -21,6 +25,7 @@ use crate::{
     Error, MessageHeader, Timestamp,
 };
 
+/// Look for AgentDB roots present in the provided database.
 pub fn search_for_roots<'a>(
     global: &'a Arc<Global>,
 ) -> impl Stream<Item = Result<String, Error>> + 'a {
@@ -66,6 +71,7 @@ pub fn search_for_roots<'a>(
         .map_ok(|(name, _)| name)
 }
 
+/// Information about an AgentDB client.
 #[derive(Debug, Clone)]
 pub struct ClientDesc {
     last_active_ts: Timestamp,
@@ -74,17 +80,21 @@ pub struct ClientDesc {
 }
 
 impl ClientDesc {
+    /// The self-determined name of the client.
     pub fn name(&self) -> &str {
         &self.name
     }
+    /// The timestamp when this client last sent a heartbeat.
     pub fn last_active_ts(&self) -> Timestamp {
         self.last_active_ts
     }
+    /// The range of partitions owned by this client.
     pub fn partitions(&self) -> Range<u32> {
         self.partitions.clone()
     }
 }
 
+/// Information about a single in-flight message.
 #[derive(Debug, Clone)]
 pub struct MessageDesc {
     message_id: Uuid,
@@ -93,17 +103,22 @@ pub struct MessageDesc {
 }
 
 impl MessageDesc {
+    /// The ID of the message.
     pub fn message_id(&self) -> Uuid {
         self.message_id
     }
+    /// The ID of the receiving agent.
     pub fn recipient_id(&self) -> Uuid {
         self.recipient_id
     }
+    /// The time when this message is scheduled to be delivered,
+    /// or `None` if the message should be delivered immediately.
     pub fn scheduled_for(&self) -> Option<Timestamp> {
         self.scheduled_for
     }
 }
 
+/// Information about a partition within an AgentDB root.
 #[derive(Debug, Clone)]
 pub struct PartitionDesc {
     pending_messages: Vec<MessageDesc>,
@@ -113,20 +128,33 @@ pub struct PartitionDesc {
 }
 
 impl PartitionDesc {
+    /// A list of the first N pending messages within this partition. These
+    /// are messages which have been sent to agents within the partition, but
+    /// have not yet been routed to the appropriate agent. This can include
+    /// messages which are scheduled to be delivered in the future.
     pub fn pending_messages(&self) -> &[MessageDesc] {
         &self.pending_messages
     }
+    /// Returns `true` if the `pending_messages` list was cut off because there
+    /// were too many messages to return.
     pub fn pending_messages_overflow(&self) -> bool {
         self.pending_messages_overflow
     }
+    /// A list of the first N batched messages within this partition. These
+    /// are messages which have already been routed to the correct agent, but
+    /// have not yet been processed. Only messages which are ready to be processed
+    /// will appear in this list.
     pub fn batched_messages(&self) -> &[MessageDesc] {
         &self.batched_messages
     }
+    /// Returns `true` if the `batched_messages` list was cut off because there
+    /// were too many messages to return.
     pub fn batched_messages_overflow(&self) -> bool {
         self.batched_messages_overflow
     }
 }
 
+/// Information about an AgentDB root.
 #[derive(Debug, Clone)]
 pub struct RootDesc {
     partition_range_recv: Range<u32>,
@@ -137,18 +165,29 @@ pub struct RootDesc {
 }
 
 impl RootDesc {
+    /// The range of partitions for clients to use when receiving messages. This
+    /// will be the same as `partition_range_send` during normal operation, but
+    /// will lag behind when a re-partition operation is in progress, to ensure that
+    /// all messages from the old partitions are processed or moved before attempting
+    /// to process messages from the new partitions.
     pub fn partition_range_recv(&self) -> Range<u32> {
         self.partition_range_recv.clone()
     }
+    /// The range of partitions to use when sending messages to agents within this
+    /// root.
     pub fn partition_range_send(&self) -> Range<u32> {
         self.partition_range_send.clone()
     }
+    /// The list of clients currently connected to this root.
     pub fn clients(&self) -> &[ClientDesc] {
         &self.clients
     }
+    /// A mapping from partition index to partition, containing all partitions
+    /// within this root.
     pub fn partitions(&self) -> &BTreeMap<u32, PartitionDesc> {
         &self.partitions
     }
+    /// The total number of agents stored within this root.
     pub fn agent_count(&self) -> i64 {
         self.agent_count
     }
@@ -279,6 +318,7 @@ async fn calculate_agent_count(tx: &Transaction, root: &RootSpace) -> Result<i64
     Ok(agent_count)
 }
 
+/// Obtain information about a given root.
 pub async fn describe_root(global: &Global, root: &str) -> Result<RootDesc, Error> {
     let root = global.root(root).await?;
     global
@@ -356,6 +396,8 @@ async fn wait_for_empty_partitions(
     Ok(())
 }
 
+/// Change the number of partitions within a root. If this operation is interrupted,
+/// it should be retried with the same arguments, or else it will return an error.
 pub async fn change_partitions(
     global: &Global,
     root: &str,
@@ -436,6 +478,7 @@ pub async fn change_partitions(
     Ok(())
 }
 
+/// List the agents within a given root starting from the provided ID.
 pub async fn list_agents(
     global: &Global,
     root: &str,

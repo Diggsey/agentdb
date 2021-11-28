@@ -1,6 +1,7 @@
 use agentdb_core::{
-    send_messages, Error, Global, HookContext, MessageToSend, StateFnInput, Timestamp,
+    send_messages, Error, Global, HookContext, OutboundMessage, StateFnInput, Timestamp,
 };
+use anyhow::anyhow;
 use foundationdb::directory::DirectoryOutput;
 use foundationdb::{TransactOption, Transaction};
 use futures::FutureExt;
@@ -13,12 +14,16 @@ use crate::message::{DynMessage, Message};
 use crate::root::Root;
 use crate::serializer::{DefaultSerializer, Serializer};
 
+// Require the ability to burst 500 messages for safe clearance
+const MIN_SAFE_CLEARANCE: i64 = 500;
+
 pub type CommitHook = Box<dyn FnOnce(HookContext) + Send + Sync + 'static>;
 
 pub struct Context<'a> {
     pub(crate) input: &'a StateFnInput<'a>,
+    pub(crate) operation_id: Uuid,
     pub(crate) root: Root,
-    pub(crate) messages: Vec<MessageToSend>,
+    pub(crate) messages: Vec<OutboundMessage>,
     pub(crate) commit_hooks: Vec<CommitHook>,
 }
 
@@ -29,13 +34,18 @@ impl<'a> ContextLike for Context<'a> {
         message: DynMessage,
         when: Timestamp,
     ) -> Result<(), Error> {
-        self.messages.push(MessageToSend {
+        self.messages.push(OutboundMessage {
             recipient_root: handle.root().to_string(),
             recipient_id: handle.id(),
+            operation_id: self.operation_id,
             when,
             content: DefaultSerializer.serialize(&message)?,
         });
         Ok(())
+    }
+
+    fn operation_id(&self) -> Uuid {
+        self.operation_id
     }
 }
 
@@ -44,6 +54,7 @@ impl<'a> Context<'a> {
         Self {
             input,
             root,
+            operation_id: Uuid::nil(),
             messages: Vec::new(),
             commit_hooks: Vec::new(),
         }
@@ -64,11 +75,19 @@ impl<'a> Context<'a> {
     pub async fn user_dir(&self) -> Result<DirectoryOutput, Error> {
         self.input.user_dir().await
     }
+    pub async fn require_clearance(&self) -> Result<(), Error> {
+        if self.input.clearance(self.operation_id).await? < MIN_SAFE_CLEARANCE {
+            Err(Error(anyhow!("Required clearance not met; failing safely")))
+        } else {
+            Ok(())
+        }
+    }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ExternalContext {
-    messages: Vec<MessageToSend>,
+    operation_id: Uuid,
+    messages: Vec<OutboundMessage>,
 }
 
 impl ContextLike for ExternalContext {
@@ -78,19 +97,27 @@ impl ContextLike for ExternalContext {
         message: DynMessage,
         when: Timestamp,
     ) -> Result<(), Error> {
-        self.messages.push(MessageToSend {
+        self.messages.push(OutboundMessage {
             recipient_root: handle.root().to_string(),
             recipient_id: handle.id(),
+            operation_id: self.operation_id,
             when,
             content: DefaultSerializer.serialize(&message)?,
         });
         Ok(())
     }
+
+    fn operation_id(&self) -> Uuid {
+        self.operation_id
+    }
 }
 
 impl ExternalContext {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            operation_id: Uuid::new_v4(),
+            messages: Vec::new(),
+        }
     }
 
     async fn run_internal(
@@ -129,6 +156,8 @@ pub trait ContextLike {
         message: DynMessage,
         when: Timestamp,
     ) -> Result<(), Error>;
+
+    fn operation_id(&self) -> Uuid;
 
     // Provided
     fn dyn_send(&mut self, handle: DynAgentRef, message: DynMessage) -> Result<(), Error> {

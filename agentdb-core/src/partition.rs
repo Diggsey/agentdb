@@ -20,7 +20,7 @@ use crate::{
         get_first_in_range, load_partition_range, load_value, move_entries,
         partition_for_recipient, save_value, Timestamp,
     },
-    HookContext, MessageHeader, StateFn, StateFnInput, MAX_BATCH_SIZE,
+    HookContext, InboundMessage, MessageHeader, StateFn, StateFnInput, MAX_BATCH_SIZE,
 };
 
 const MAX_POLL_INTERVAL_SECS: u64 = 120;
@@ -242,26 +242,30 @@ impl PartitionState {
                         recipient_range.limit = Some(*max_batch_size);
 
                         // Load and clear all the message IDs
-                        let mut all_blob_ids = Vec::new();
+                        let mut all_msg_hdrs = Vec::new();
                         let mut msg_stream = tx.get_ranges(recipient_range, false);
                         while let Some(msgs) = msg_stream.try_next().await? {
                             for msg in msgs {
                                 // Decode the message header
                                 let msg_hdr: MessageHeader = postcard::from_bytes(msg.value())?;
                                 tx.clear(msg.key());
-                                all_blob_ids.push(msg_hdr.blob_id);
+                                all_msg_hdrs.push(msg_hdr);
                             }
                         }
 
                         // Load all the message contents
-                        let mut all_msgs = Vec::with_capacity(all_blob_ids.len());
-                        for blob_id in all_blob_ids {
-                            all_msgs.push(
-                                blob::load_internal(tx, &root, blob_id, true)
+                        let mut all_msgs = Vec::with_capacity(all_msg_hdrs.len());
+                        for msg_hdr in all_msg_hdrs {
+                            let inbound_msg = InboundMessage {
+                                operation_id: msg_hdr.operation_id,
+                                data: blob::load_internal(tx, &root, msg_hdr.blob_id, true)
                                     .await?
-                                    .ok_or_else(|| Error(anyhow!("Blob not found: {}", blob_id)))?,
-                            );
-                            blob::delete_internal(tx, &root, blob_id);
+                                    .ok_or_else(|| {
+                                        Error(anyhow!("Blob not found: {}", msg_hdr.blob_id))
+                                    })?,
+                            };
+                            all_msgs.push(inbound_msg);
+                            blob::delete_internal(tx, &root, msg_hdr.blob_id);
                         }
 
                         log::info!(
@@ -272,6 +276,7 @@ impl PartitionState {
 
                         let state_fn_input = StateFnInput {
                             user_dir: &root.user_dir,
+                            operation_ts: &root.operation_ts,
                             root: &root.root,
                             tx,
                             id: recipient.id,

@@ -34,6 +34,9 @@ impl<M: Construct> DynConstruct for M {
         ref_: DynAgentRef,
         context: &mut Context<'_>,
     ) -> Result<Option<DynAgent>, Error> {
+        if M::Agent::is_frangible() {
+            context.require_clearance().await?;
+        }
         let maybe_agent = self.construct(ref_.unchecked_downcast(), context).await?;
         Ok(maybe_agent.map(|agent| Box::new(agent) as _))
     }

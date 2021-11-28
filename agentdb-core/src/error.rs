@@ -6,15 +6,18 @@ use std::{
 use anyhow::anyhow;
 use foundationdb::{directory::error::DirectoryError, FdbError, TransactError};
 
+/// The error type used by AgentDB.
 pub struct Error(pub anyhow::Error);
 
 impl Error {
+    /// Convert from any error type which implements `TransactError + Debug`.
     pub fn from_transact(other: impl TransactError + Debug) -> Self {
         match other.try_into_fdb_error() {
             Ok(e) => e.into(),
             Err(e) => Self(anyhow!("{:?}", e)),
         }
     }
+    /// Convert from FoundationDB's `DirectoryError` type.
     pub fn from_dir(other: DirectoryError) -> Self {
         match other {
             DirectoryError::FdbError(e) => e.into(),

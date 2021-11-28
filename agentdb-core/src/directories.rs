@@ -13,7 +13,8 @@ pub const AGENTDB_LAYER: &[u8] = b"agentdb";
 
 use crate::{Error, Timestamp, TypedSubspace};
 
-// AgentDB must be initialized with a directory layer and a database connection
+/// AgentDB must be initialized with a connection to FoundationDB, and
+/// a FoundationDB directory layer for storing AgentDB roots.
 pub struct Global {
     pub(crate) db: Arc<Database>,
     pub(crate) dir: DirectoryLayer,
@@ -25,6 +26,7 @@ fn read_rwlock<T, R>(lock: &RwLock<T>, f: impl FnOnce(&T) -> R) -> R {
 }
 
 impl Global {
+    /// Construct a global instance with a database connection and custom directory layer.
     pub fn new_with_dir(db: Arc<Database>, dir: DirectoryLayer) -> Arc<Self> {
         Arc::new(Self {
             db,
@@ -32,18 +34,23 @@ impl Global {
             roots: Default::default(),
         })
     }
+    /// Construct a global instance with a database connection and the default directory layer.
     pub fn new(db: Arc<Database>) -> Arc<Self> {
         Self::new_with_dir(db, Default::default())
     }
+    /// Construct a global instance by connecting to FoundationDB and using the default directory layer.
     pub fn connect(path: Option<&str>) -> Result<Arc<Self>, Error> {
         Ok(Self::new(Arc::new(Database::new(path)?)))
     }
+    /// Construct a global instance by connecting to FoundationDB and using a custom directory layer.
     pub fn connect_with_dir(path: Option<&str>, dir: DirectoryLayer) -> Result<Arc<Self>, Error> {
         Ok(Self::new_with_dir(Arc::new(Database::new(path)?), dir))
     }
+    /// Get the database connection used by this instance.
     pub fn db(&self) -> &Arc<Database> {
         &self.db
     }
+    /// Get the directory layer used by this instance.
     pub fn dir(&self) -> &DirectoryLayer {
         &self.dir
     }
@@ -72,6 +79,7 @@ pub(crate) struct RootSpace {
     pub(crate) partition_range_recv: Vec<u8>,
     pub(crate) partition_dir: DirectoryOutput,
     pub(crate) partitions: RwLock<HashMap<u32, Arc<PartitionSpace>>>,
+    pub(crate) operation_ts: TypedSubspace<Uuid>,
 }
 
 impl RootSpace {
@@ -105,6 +113,8 @@ impl RootSpace {
                             .create_or_open(tx, vec!["partition".into()], None, None)
                             .await
                             .map_err(Error::from_dir)?;
+                        let operation_ts =
+                            TypedSubspace::open_or_create(tx, &dir, "operation_ts").await?;
                         Ok(Self {
                             root: root.into(),
                             user_dir,
@@ -117,6 +127,7 @@ impl RootSpace {
                             partition_range_recv,
                             partition_dir,
                             partitions: Default::default(),
+                            operation_ts,
                         })
                     }
                     .boxed()
@@ -165,12 +176,7 @@ impl PartitionSpace {
                     async move {
                         let dir = parent
                             .partition_dir
-                            .create_or_open(
-                                tx,
-                                vec![partition.to_string()],
-                                None,
-                                Some(AGENTDB_LAYER.into()),
-                            )
+                            .create_or_open(tx, vec![partition.to_string()], None, None)
                             .await
                             .map_err(Error::from_dir)?;
                         let modified = dir.pack(&"modified".as_bytes());

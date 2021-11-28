@@ -1,15 +1,22 @@
 use std::{collections::BTreeMap, ops::Range, sync::Arc};
 
-use foundationdb::{FdbError, TransactOption};
+use byteorder::{ByteOrder, LittleEndian};
+use foundationdb::options::MutationType;
+use foundationdb::{FdbError, RangeOption, TransactOption, Transaction};
 use futures::{select, FutureExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::cancellation::{spawn_cancellable, CancellableHandle, Cancellation};
 use crate::directories::{Global, RootSpace};
+use crate::message::INITIAL_TS_OFFSET;
 use crate::partition::partition_task;
 use crate::utils::load_partition_range;
-use crate::{Error, StateFn, Timestamp, HEARTBEAT_INTERVAL};
+use crate::{Error, StateFn, Timestamp, GC_INTERVAL, HEARTBEAT_INTERVAL};
+
+// Collect operations more than 5 minutes old
+const GC_AGE_MS: i64 = (1000 * 60 * 5) + INITIAL_TS_OFFSET;
+const GC_COUNT_PER_CLIENT: usize = 256;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub struct PartitionAssignment {
@@ -163,6 +170,54 @@ impl ClientState {
 
         Ok(())
     }
+
+    async fn gc_range(
+        tx: &Transaction,
+        gc_ts: i64,
+        range: impl Into<RangeOption<'_>>,
+        reverse: bool,
+    ) -> Result<(), Error> {
+        let mut range = range.into();
+        range.limit = Some(GC_COUNT_PER_CLIENT);
+        range.reverse = reverse;
+        let mut stream = tx.get_ranges(range, true);
+        while let Some(values) = stream.try_next().await? {
+            for value in values {
+                let ts = LittleEndian::read_i64(value.value());
+                if ts < gc_ts {
+                    tx.atomic_op(value.key(), value.value(), MutationType::CompareAndClear)
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn gc(&mut self) -> Result<(), Error> {
+        let gc_id = Uuid::new_v4();
+        let current_ts = Timestamp::now().millis();
+        let gc_ts = current_ts - GC_AGE_MS;
+
+        self.global
+            .db()
+            .transact_boxed(
+                &self.root,
+                |tx, &mut root| {
+                    async move {
+                        Self::gc_range(tx, gc_ts, root.operation_ts.subrange(gc_id..), false)
+                            .await?;
+                        Self::gc_range(tx, gc_ts, root.operation_ts.subrange(..gc_id), true)
+                            .await?;
+
+                        Ok::<_, Error>(())
+                    }
+                    .boxed()
+                },
+                TransactOption::idempotent(),
+            )
+            .await?;
+
+        Ok(())
+    }
 }
 
 pub async fn client_task(
@@ -176,12 +231,14 @@ pub async fn client_task(
     let client_id = Uuid::new_v4();
     let mut client_state = ClientState::new(name, global, root, client_id, state_fn);
     let mut interval = tokio::time::interval(HEARTBEAT_INTERVAL);
+    let mut gc_interval = tokio::time::interval(GC_INTERVAL);
     log::info!("Starting client...");
 
     loop {
         select! {
             _ = cancellation => break,
             _ = interval.tick().fuse() => client_state.tick().await?,
+            _ = gc_interval.tick().fuse() => client_state.gc().await?,
         }
     }
     Ok(())

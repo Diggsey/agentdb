@@ -10,10 +10,12 @@ use syn::{
 #[derive(Debug, FromMeta)]
 struct AgentArgs {
     name: String,
+    #[darling(default)]
+    frangible: bool,
 }
 
 fn agent_impl(parsed_attrs: AttributeArgs, parsed_item: Item) -> Result<TokenStream2, Error> {
-    let AgentArgs { name } = AgentArgs::from_list(&parsed_attrs)?;
+    let AgentArgs { name, frangible } = AgentArgs::from_list(&parsed_attrs)?;
 
     let type_ident = match &parsed_item {
         Item::Enum(x) => &x.ident,
@@ -31,7 +33,9 @@ fn agent_impl(parsed_attrs: AttributeArgs, parsed_item: Item) -> Result<TokenStr
         #parsed_item
 
         ::agentdb_system::declare_agent!(
-            #name => #type_ident
+            #name => #type_ident [
+                #frangible
+            ]
         );
     })
 }

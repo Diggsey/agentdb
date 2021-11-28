@@ -11,10 +11,15 @@ macro_rules! declare_root {
 
 #[macro_export]
 macro_rules! declare_agent {
-    ($name:literal => $t:ty) => {
+    ($name:literal => $t:ty [
+        $frangible:literal
+    ]) => {
         #[$crate::hidden::typetag::serde(name = $name)]
         #[$crate::hidden::async_trait]
         impl $crate::Agent for $t {
+            fn is_frangible() -> bool {
+                $frangible
+            }
             async fn _internal_destruct(
                 self: Box<Self>,
                 ref_: $crate::DynAgentRef,

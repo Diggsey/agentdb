@@ -24,8 +24,9 @@ async fn system_fn_fallible(mut input: StateFnInput<'_>) -> Result<StateFnOutput
 
     let agent_ref = DynAgentRef { id: input.id, root };
 
-    for msg_bytes in messages {
-        let msg = DefaultSerializer.deserialize::<DynMessage>(&msg_bytes)?;
+    for inbound_msg in messages {
+        context.operation_id = inbound_msg.operation_id;
+        let msg = DefaultSerializer.deserialize::<DynMessage>(&inbound_msg.data)?;
         msg._internal_deliver(agent_ref, &mut maybe_agent_state, &mut context)
             .await?;
     }

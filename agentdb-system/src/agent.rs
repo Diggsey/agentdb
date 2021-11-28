@@ -30,12 +30,21 @@ pub async fn handle_dyn<A: Agent>(
 where
     HandlerDyn<A>: inventory::Collect,
 {
+    if A::is_frangible() {
+        context.require_clearance().await?;
+    }
     HandlerDyn::call(state, ref_.unchecked_downcast(), message, context).await
 }
 
 #[typetag::serde]
 #[async_trait]
 pub trait Agent: mopa::Any + Send + Sync {
+    fn is_frangible() -> bool
+    where
+        Self: Sized,
+    {
+        false
+    }
     #[doc(hidden)]
     async fn _internal_destruct(
         self: Box<Self>,
