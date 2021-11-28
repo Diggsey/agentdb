@@ -18,7 +18,7 @@ async fn system_fn_fallible(mut input: StateFnInput<'_>) -> Result<StateFnOutput
         None
     };
 
-    let root = Root::from_str(input.root).ok_or_else(|| Error(anyhow!("Unknown root")))?;
+    let root = Root::from_name(input.root).ok_or_else(|| Error(anyhow!("Unknown root")))?;
     let messages = std::mem::replace(&mut input.messages, Vec::new());
     let mut context = Context::new(&input, root);
 
@@ -54,6 +54,7 @@ async fn system_fn(input: StateFnInput<'_>) -> Result<StateFnOutput, ()> {
     })
 }
 
+/// Start the AgentDB client, and return a cancellable handle.
 pub fn start(
     client_name: String,
     global: Arc<Global>,
@@ -67,6 +68,7 @@ pub fn start(
     )
 }
 
+/// Run the AgentDB client forever, or until an error is returned.
 pub async fn run(client_name: String, global: Arc<Global>, root: Root) -> Result<(), Error> {
     start(client_name, global, root).await?
 }

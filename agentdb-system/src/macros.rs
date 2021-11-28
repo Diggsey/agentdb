@@ -1,3 +1,8 @@
+/// Declare a new AgentDB root with the given name.
+///
+/// ```rust
+/// declare_root!("my_root" => MY_ROOT);
+/// ```
 #[macro_export]
 macro_rules! declare_root {
     ($name:literal => $v:ident) => {
@@ -9,6 +14,7 @@ macro_rules! declare_root {
     };
 }
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! declare_agent {
     ($name:literal => $t:ty [
@@ -39,6 +45,7 @@ macro_rules! declare_agent {
     };
 }
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! declare_message {
     ($name:literal => $t:ty) => {
@@ -57,6 +64,7 @@ macro_rules! declare_message {
     };
 }
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! declare_constructor {
     ($t:ty) => {
@@ -66,6 +74,7 @@ macro_rules! declare_constructor {
     };
 }
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! declare_destructor {
     ($t:ty) => {
@@ -75,6 +84,7 @@ macro_rules! declare_destructor {
     };
 }
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! declare_handler {
     ($a:ty [ $($b:ty),* ]) => {
@@ -86,6 +96,7 @@ macro_rules! declare_handler {
     };
 }
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! declare_dyn_handler {
     ($a:ty) => {

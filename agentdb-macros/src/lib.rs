@@ -1,3 +1,8 @@
+#![deny(missing_docs)]
+//! agentdb-macros
+//!
+//! Defines procedural macros for use by the `agentdb-system` crate.
+
 use darling::{Error, FromMeta};
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
@@ -40,6 +45,16 @@ fn agent_impl(parsed_attrs: AttributeArgs, parsed_item: Item) -> Result<TokenStr
     })
 }
 
+/// Defines a new agent type.
+///
+/// Required parameters:
+/// - name
+///   The unique name used when serializing this agent type.
+///
+/// Optional parameters:
+/// - frangible
+///   Whether this agent can safely "stall" without impacting the
+///   overall system.
 #[proc_macro_attribute]
 pub fn agent(attrs: TokenStream, item: TokenStream) -> TokenStream {
     let parsed_attrs = parse_macro_input!(attrs as AttributeArgs);
@@ -80,6 +95,11 @@ fn message_impl(parsed_attrs: AttributeArgs, parsed_item: Item) -> Result<TokenS
     })
 }
 
+/// Defines a new message type.
+///
+/// Required parameters:
+/// - name
+///   The unique name used when serializing this message type.
 #[proc_macro_attribute]
 pub fn message(attrs: TokenStream, item: TokenStream) -> TokenStream {
     let parsed_attrs = parse_macro_input!(attrs as AttributeArgs);
@@ -127,6 +147,7 @@ fn constructor_impl(parsed_attrs: AttributeArgs, parsed_item: Item) -> Result<To
     })
 }
 
+/// Defines a new constructor implementation.
 #[proc_macro_attribute]
 pub fn constructor(attrs: TokenStream, item: TokenStream) -> TokenStream {
     let parsed_attrs = parse_macro_input!(attrs as AttributeArgs);
@@ -196,6 +217,7 @@ fn handler_impl(parsed_attrs: AttributeArgs, parsed_item: Item) -> Result<TokenS
     }
 }
 
+/// Defines a new handler implementation.
 #[proc_macro_attribute]
 pub fn handler(attrs: TokenStream, item: TokenStream) -> TokenStream {
     let parsed_attrs = parse_macro_input!(attrs as AttributeArgs);

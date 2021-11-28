@@ -1,3 +1,6 @@
+//! This module defines an agent which manages retries of a side-effectful
+//! operation.
+
 use std::{sync::Arc, time::Duration};
 
 use agentdb_system::*;
@@ -7,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use super::callback::{EffectCallback, EffectContext};
 use super::{EffectFailure, EffectFailureReason};
 
+/// Parameters to control the amount of backoff between
+/// retry attempts.
 #[derive(Serialize, Deserialize)]
 pub struct RetryBackoff {
     initial_backoff: Duration,
@@ -16,6 +21,7 @@ pub struct RetryBackoff {
 }
 
 impl RetryBackoff {
+    /// Calculate the delay for a given attempt using these parameters.
     pub fn calculate_delay(&self, attempt: u64) -> Duration {
         let attempt = attempt as f64;
         let exp_delay = self.base.powf(attempt);
@@ -24,6 +30,8 @@ impl RetryBackoff {
         let jitter_factor = (random::<f64>() * 2.0 - 1.0) * self.jitter + 1.0;
         self.initial_backoff.mul_f64(perfect_delay * jitter_factor)
     }
+    /// Configure the parameters for exponential backoff using the given initial backoff
+    /// and exponent base.
     pub fn exponential(base: f64, initial_backoff: Duration) -> Self {
         Self {
             initial_backoff,
@@ -32,10 +40,14 @@ impl RetryBackoff {
             exponent: 0.0,
         }
     }
+    /// Modify existing backoff parameters to add some random jitter. The jitter should
+    /// be in the range 0-1.
     pub fn with_jitter(mut self, jitter: f64) -> Self {
         self.jitter = jitter;
         self
     }
+    /// Construct a polynomial backoff using the given initial backoff and the leading
+    /// exponent of the polynomial.
     pub fn polynomial(exponent: f64, initial_backoff: Duration) -> Self {
         Self {
             initial_backoff,
@@ -44,15 +56,17 @@ impl RetryBackoff {
             exponent,
         }
     }
+    /// Construct a linear backoff using the given initial backoff.
     pub fn linear(initial_backoff: Duration) -> Self {
         Self::polynomial(1.0, initial_backoff)
     }
+    /// Construct a quadratic backoff using the given initial backoff.
     pub fn quadratic(initial_backoff: Duration) -> Self {
         Self::polynomial(2.0, initial_backoff)
     }
 }
 
-// Effect agent which will automatically retry a callback
+/// Effect agent which will automatically retry a callback on failure.
 #[agent(name = "adb.effects.retry")]
 #[derive(Serialize, Deserialize)]
 pub struct Retry {
@@ -61,7 +75,7 @@ pub struct Retry {
 }
 
 impl Retry {
-    /// Returns true if the agent should delete itself
+    // Returns true if the agent should delete itself
     async fn trigger(
         &mut self,
         ref_: AgentRef<Self>,
@@ -104,7 +118,7 @@ impl Retry {
     }
 }
 
-// Message to construct a retry agent
+/// Message to construct a retry agent
 #[message(name = "adb.effects.retry.do")]
 #[derive(Serialize, Deserialize)]
 pub struct DoRetry {
@@ -116,6 +130,9 @@ pub struct DoRetry {
 }
 
 impl DoRetry {
+    /// Construct a new `DoRetry` message using the provided caller and side-effect callback.
+    /// The caller will receive the response message in the event of success, or an `EffectFailure`
+    /// message when the retry limit is hit.
     pub fn new(caller: impl Into<DynAgentRef>, callback: impl EffectCallback) -> Self {
         Self {
             caller: caller.into(),
@@ -125,14 +142,18 @@ impl DoRetry {
             max_attempts: Some(5),
         }
     }
+    // Configure backoff parameters.
+    /// By default, an exponential backoff with base 2 and an initial backoff of 5s will be used.
     pub fn with_backoff(mut self, backoff: RetryBackoff) -> Self {
         self.backoff = backoff;
         self
     }
+    /// Configure the maximum number of attempts. Defaults to 5.
     pub fn with_max_attempts(mut self, max_attempts: Option<u64>) -> Self {
         self.max_attempts = max_attempts;
         self
     }
+    /// Configure the maximum overall timeout. By default there is no timeout.
     pub fn with_timeout(mut self, timeout: Option<Duration>) -> Self {
         self.timeout = timeout;
         self

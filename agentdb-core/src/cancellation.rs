@@ -55,7 +55,8 @@ impl FusedFuture for Cancellation {
 }
 
 /// A handle to a cancellable task which will (if it completes) will return
-/// a value of type `T`.
+/// a value of type `T`. This handle is also a future which resolves with
+/// the returned value on completion.
 pub struct CancellableHandle<T> {
     guard: Option<OwnedRwLockWriteGuard<bool>>,
     inner: JoinHandle<T>,

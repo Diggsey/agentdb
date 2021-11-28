@@ -13,6 +13,7 @@ use crate::agent::{Agent, DynAgent};
 use crate::root::Root;
 use crate::serializer::{DefaultSerializer, Serializer};
 
+/// A handle to an agent whose type is unknown.
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct DynAgentRef {
     pub(crate) root: Root,
@@ -20,34 +21,43 @@ pub struct DynAgentRef {
 }
 
 impl DynAgentRef {
+    /// Directly construct the handle from a root and agent ID.
     pub const fn from_parts(root: Root, id: Uuid) -> Self {
         Self { root, id }
     }
+
+    /// Downcast this handle to a handle of a specific agent type.
+    /// If the agent is not actually of this type, the conversion will
+    /// silently succeed regardless.
     pub fn unchecked_downcast<A: Agent>(self) -> AgentRef<A> {
         AgentRef {
             inner: self,
             phantom: PhantomData,
         }
     }
+    /// Obtain the AgentDB root containing this agent.
     pub fn root(self) -> Root {
         self.root
     }
+    /// Obtain the ID of the agent.
     pub fn id(self) -> Uuid {
         self.id
     }
+    /// Directly load this agent's state from the database as part of a transaction.
     pub async fn load_tx(
         self,
         global: &Global,
         tx: &Transaction,
         snapshot: bool,
     ) -> Result<Option<DynAgent>, Error> {
-        let maybe_blob = blob::load(tx, global, self.root.as_str(), self.id, snapshot).await?;
+        let maybe_blob = blob::load(tx, global, self.root.name(), self.id, snapshot).await?;
         Ok(if let Some(state) = maybe_blob {
             Some(DefaultSerializer.deserialize::<DynAgent>(&state)?)
         } else {
             None
         })
     }
+    /// Directly load this agent's state from the database.
     pub async fn load(self, global: &Global) -> Result<Option<DynAgent>, Error> {
         global
             .db()
@@ -58,18 +68,20 @@ impl DynAgentRef {
             )
             .await
     }
+    /// Watch for the first change to this agent's state.
     pub async fn watch(
         self,
         global: &Global,
         tx: &Transaction,
     ) -> Result<impl Future<Output = Result<(), Error>> + 'static, Error> {
-        blob::watch(tx, global, self.root.as_str(), self.id).await
+        blob::watch(tx, global, self.root.name(), self.id).await
     }
+    /// Watch for all changes to this agent's state.
     pub fn watch_stream(
         self,
         global: Arc<Global>,
     ) -> impl Stream<Item = Result<Option<DynAgent>, Error>> + 'static {
-        blob::watch_stream(global, self.root.as_str(), self.id).and_then(|maybe_blob| async move {
+        blob::watch_stream(global, self.root.name(), self.id).and_then(|maybe_blob| async move {
             Ok(if let Some(state) = maybe_blob {
                 Some(DefaultSerializer.deserialize::<DynAgent>(&state)?)
             } else {
@@ -85,6 +97,7 @@ impl<A: Agent> From<AgentRef<A>> for DynAgentRef {
     }
 }
 
+/// A handle to an agent of type `A`.
 pub struct AgentRef<A> {
     inner: DynAgentRef,
     phantom: PhantomData<Arc<Mutex<A>>>,
@@ -128,6 +141,9 @@ impl<'de, A: Agent> Deserialize<'de> for AgentRef<A> {
 }
 
 impl<A> AgentRef<A> {
+    /// Directly construct this handle from a root and agent ID. The construction will
+    /// silently succeed even if no such agent exists, or if the agent is of the wrong
+    /// type.
     pub const fn from_parts_unchecked(root: Root, id: Uuid) -> Self {
         Self {
             inner: DynAgentRef::from_parts(root, id),
@@ -137,9 +153,11 @@ impl<A> AgentRef<A> {
 }
 
 impl<A: Agent> AgentRef<A> {
+    /// Obtain the AgentDB root containing this agent.
     pub fn root(self) -> Root {
         self.inner.root
     }
+    /// Obtain the ID of this agent.
     pub fn id(self) -> Uuid {
         self.inner.id
     }
@@ -154,6 +172,7 @@ impl<A: Agent> AgentRef<A> {
             None
         })
     }
+    /// Directly load this agent's state from the database as part of a transaction.
     pub async fn load_tx(
         self,
         global: &Global,
@@ -162,9 +181,11 @@ impl<A: Agent> AgentRef<A> {
     ) -> Result<Option<A>, Error> {
         Self::downcast_state(self.inner.load_tx(global, tx, snapshot).await?)
     }
+    /// Directly load this agent's state from the database.
     pub async fn load(self, global: &Global) -> Result<Option<A>, Error> {
         Self::downcast_state(self.inner.load(global).await?)
     }
+    /// Watch for the first change to this agent's state.
     pub async fn watch(
         self,
         global: &Global,
@@ -172,6 +193,7 @@ impl<A: Agent> AgentRef<A> {
     ) -> Result<impl Future<Output = Result<(), Error>> + 'static, Error> {
         self.inner.watch(global, tx).await
     }
+    /// Watch for all changes to this agent's state.
     pub fn watch_stream(
         self,
         global: Arc<Global>,

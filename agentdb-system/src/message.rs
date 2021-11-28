@@ -7,8 +7,10 @@ use crate::constructor::Constructor;
 use crate::context::Context;
 use crate::handler::Handler;
 
+/// A message of any type.
 pub type DynMessage = Box<dyn Message>;
 
+#[doc(hidden)]
 pub async fn deliver_message<M: Message>(
     message: M,
     agent_ref: DynAgentRef,
@@ -31,6 +33,7 @@ where
     Ok(())
 }
 
+/// Trait implemented by message types.
 #[typetag::serde]
 #[async_trait]
 pub trait Message: Send + Sync + 'static {

@@ -8,8 +8,12 @@ use crate::context::Context;
 use crate::message::Message;
 use crate::utils::dynamic_registry;
 
+/// Trait implemented by messages which can be used to construct agents,
+/// where the type of the constructed agent is not known.
 #[async_trait]
 pub trait DynConstruct: Message {
+    /// Attempt to construct an agent using this message. Returns `None`
+    /// if no agent should be constructed.
     async fn dyn_construct(
         self,
         ref_: DynAgentRef,
@@ -17,9 +21,14 @@ pub trait DynConstruct: Message {
     ) -> Result<Option<DynAgent>, Error>;
 }
 
+/// Trait implemented by messages which can be used to construct agents
+/// of a known type.
 #[async_trait]
 pub trait Construct: DynConstruct {
+    /// The type of agent constructed by this message.
     type Agent: Agent;
+    /// Attempt to construct an agent using this message. Returns `None`
+    /// if no agent should be constructed.
     async fn construct(
         self,
         ref_: AgentRef<Self::Agent>,
@@ -42,6 +51,7 @@ impl<M: Construct> DynConstruct for M {
     }
 }
 
+#[doc(hidden)]
 pub struct Constructor<C: Message>
 where
     Self: inventory::Collect,
@@ -57,6 +67,7 @@ impl<C: Message> Constructor<C>
 where
     Self: inventory::Collect,
 {
+    #[doc(hidden)]
     pub fn new() -> Self
     where
         C: DynConstruct,
@@ -65,7 +76,7 @@ where
             construct_fn: |message, ref_, context| C::dyn_construct(message, ref_, context),
         }
     }
-    pub async fn call(
+    pub(crate) async fn call(
         message: C,
         ref_: DynAgentRef,
         context: &mut Context<'_>,

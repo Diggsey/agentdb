@@ -1,3 +1,6 @@
+//! This module defines a callback type capable of causing
+//! external side-effects.
+
 use std::sync::Arc;
 
 use agentdb_system::*;
@@ -40,5 +43,6 @@ impl EffectContext {
 /// Represents a effectful operation that can be serialized
 #[typetag::serde]
 pub trait EffectCallback: Send + Sync + 'static {
+    /// Run the callback.
     fn call(&self, context: EffectContext);
 }

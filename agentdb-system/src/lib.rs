@@ -1,3 +1,49 @@
+#![deny(missing_docs)]
+//! # agentdb-system
+//!
+//! This crate provides a higher level interface to `agentdb-core`. The same concepts
+//! of agents, messages, etc. exist, but the following new concepts are introduced:
+//!
+//! ## Agent types
+//!
+//! Rather than the evolution of the system being dictated by a single global state
+//! function, this crate distinguishes different types of agent, and allows each
+//! type to operate according to its own state function.
+//!
+//! New agent types can be created by adding the `#[agent(name = "...")]` attribute to a type.
+//!
+//! ## Message types
+//!
+//! Similarly to agents, messages are now distinguished by type. Agents can respond
+//! to different types of messages in different ways.
+//!
+//! New message types can be created by adding the `#[message(name = "...")]` attribute to a type.
+//!
+//! ## Registry
+//!
+//! The different agent and message types are registered at startup in a global
+//! registry. This is handled automatically by the corresponding attribute macros.
+//!
+//! The names of registered agents and messages should be unique and stable.
+//!
+//! ## Handlers
+//!
+//! Handlers are implementations of the `Handle<M>` or `HandleDyn` traits for an agent type.
+//! They are registered with the `#[handler]` attribute. The handlers control how an
+//! existing agent responds to messages.
+//!
+//! ## Constructors
+//!
+//! Constructors are implementations of the `Construct` trait for a message type.
+//! They are registered with the `#[constructor]` attribute. The constructors
+//! control the behaviour when a message is sent to an agent that doesn't exist.
+//!
+//! ## Destructors
+//!
+//! Destructors are implementations of the `Destruct` trait for an agent type.
+//! They are registered with the `#[destructor]` attribute. The destructor
+//! controls the behaviour of an agent when it ceases to exist.
+
 mod agent;
 mod agent_ref;
 mod constructor;

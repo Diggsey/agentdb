@@ -7,11 +7,14 @@ use crate::agent_ref::AgentRef;
 use crate::context::Context;
 use crate::utils::dynamic_registry;
 
+/// Implemented to perform some action when an agent is destroyed.
 #[async_trait]
 pub trait Destruct: Agent + Sized {
+    /// Called when the agent is destroyed.
     async fn destruct(self, ref_: AgentRef<Self>, context: &mut Context) -> Result<(), Error>;
 }
 
+#[doc(hidden)]
 pub struct Destructor<A: Agent>
 where
     Self: inventory::Collect,
@@ -27,6 +30,7 @@ impl<A: Agent> Destructor<A>
 where
     Self: inventory::Collect,
 {
+    #[doc(hidden)]
     pub fn new() -> Self
     where
         A: Destruct,
@@ -35,7 +39,11 @@ where
             destruct_fn: |state, ref_, context| A::destruct(state, ref_, context),
         }
     }
-    pub async fn call(state: A, ref_: AgentRef<A>, context: &mut Context<'_>) -> Result<(), Error>
+    pub(crate) async fn call(
+        state: A,
+        ref_: AgentRef<A>,
+        context: &mut Context<'_>,
+    ) -> Result<(), Error>
     where
         Self: inventory::Collect,
     {

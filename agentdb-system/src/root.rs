@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::AgentRef;
 
+/// An AgentDB root
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Root {
     name: &'static str,
@@ -17,13 +18,14 @@ impl Root {
     pub const fn new(name: &'static str) -> Self {
         Self { name }
     }
+    /// Obtain the name of this root.
     pub fn name(self) -> &'static str {
         self.name
     }
-    pub fn as_str(self) -> &'static str {
-        &self.name
-    }
-    pub fn from_str(name: &str) -> Option<Self> {
+
+    /// Attempt to get the root with the given name. The root must
+    /// have been defined somewhere in this crate or its dependencies.
+    pub fn from_name(name: &str) -> Option<Self> {
         for &root in inventory::iter::<Root> {
             if root.name == name {
                 return Some(root);
@@ -31,10 +33,8 @@ impl Root {
         }
         None
     }
-    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        Self::from_str(std::str::from_utf8(bytes).ok()?)
-    }
 
+    /// Const-construct an AgentRef directly form this root and an agent ID, encoded as a `u128`.
     pub const fn const_ref<A>(self, id: u128) -> AgentRef<A> {
         AgentRef::from_parts_unchecked(self, Uuid::from_u128(id))
     }
@@ -42,7 +42,7 @@ impl Root {
 
 impl Display for Root {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.as_str().fmt(f)
+        self.name().fmt(f)
     }
 }
 
@@ -73,7 +73,7 @@ impl<'de> Visitor<'de> for RootVisitor {
     where
         E: serde::de::Error,
     {
-        Root::from_str(v)
+        Root::from_name(v)
             .ok_or_else(|| serde::de::Error::invalid_value(serde::de::Unexpected::Str(v), &self))
     }
 

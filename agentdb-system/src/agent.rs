@@ -8,8 +8,10 @@ use crate::destructor::Destructor;
 use crate::dynamic_handler::HandlerDyn;
 use crate::message::DynMessage;
 
+/// An agent of any type.
 pub type DynAgent = Box<dyn Agent>;
 
+#[doc(hidden)]
 pub async fn destruct_agent<A: Agent>(
     state: A,
     ref_: DynAgentRef,
@@ -21,6 +23,7 @@ where
     Destructor::call(state, ref_.unchecked_downcast(), context).await
 }
 
+#[doc(hidden)]
 pub async fn handle_dyn<A: Agent>(
     state: &mut A,
     ref_: DynAgentRef,
@@ -36,9 +39,16 @@ where
     HandlerDyn::call(state, ref_.unchecked_downcast(), message, context).await
 }
 
+/// The trait implemented by agent types using the `#[agent(...)]` attribute macro.
 #[typetag::serde]
 #[async_trait]
 pub trait Agent: mopa::Any + Send + Sync {
+    /// Returns `true` if this agent can "stall" without impacting the overall availability
+    /// of the system. In the event that an operation's work limit is exceeded, the operation
+    /// will prefer to stall at a frangible agent if possible.
+    ///
+    /// You should mark as many agents as possible as "frangible" using the `#[agent(..., frangible)]`
+    /// attribute, so that failures do not cascade throughout the entire system.
     fn is_frangible() -> bool
     where
         Self: Sized,

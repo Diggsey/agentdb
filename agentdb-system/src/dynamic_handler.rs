@@ -9,8 +9,12 @@ use crate::context::Context;
 use crate::message::DynMessage;
 use crate::utils::dynamic_registry;
 
+/// Trait implemented by agents to handle messages of
+/// unknown type.
 #[async_trait]
 pub trait HandleDyn: Agent + Sized {
+    /// Handle the provided message. Returns `true` to indicate
+    /// that the agent should terminate.
     async fn handle_dyn(
         &mut self,
         ref_: AgentRef<Self>,
@@ -19,6 +23,7 @@ pub trait HandleDyn: Agent + Sized {
     ) -> Result<bool, Error>;
 }
 
+#[doc(hidden)]
 pub struct HandlerDyn<A: Agent>
 where
     Self: inventory::Collect,
@@ -35,6 +40,7 @@ impl<A: Agent> HandlerDyn<A>
 where
     Self: inventory::Collect,
 {
+    #[doc(hidden)]
     pub fn new() -> Self
     where
         A: HandleDyn,
@@ -45,7 +51,7 @@ where
             },
         }
     }
-    pub async fn call(
+    pub(crate) async fn call(
         state: &mut A,
         ref_: AgentRef<A>,
         message: DynMessage,
