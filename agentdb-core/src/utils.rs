@@ -66,7 +66,7 @@ pub async fn get_first_in_range(
     range.limit = Some(1);
     let mut stream = tx.get_ranges(range, snapshot);
     while let Some(values) = stream.try_next().await? {
-        for value in values {
+        if let Some(value) = values.into_iter().next() {
             return Ok(Some(value));
         }
     }
@@ -205,7 +205,9 @@ impl Sub<Timestamp> for Timestamp {
     type Output = Duration;
 
     fn sub(self, rhs: Timestamp) -> Self::Output {
-        (self.0 - rhs.0).to_std().unwrap_or(Duration::from_secs(0))
+        (self.0 - rhs.0)
+            .to_std()
+            .unwrap_or_else(|_| Duration::from_secs(0))
     }
 }
 

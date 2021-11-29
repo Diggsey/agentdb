@@ -32,7 +32,7 @@ pub async fn send_messages(
     let mut partition_modified = HashSet::new();
     let mut operations = HashMap::<_, i64>::new();
 
-    for (idx, msg) in msgs.into_iter().enumerate() {
+    for (idx, msg) in msgs.iter().enumerate() {
         let recipient_root = global.root(&msg.recipient_root).await?;
         let entry = partition_counts.entry(&msg.recipient_root);
         let partition_range = match entry {

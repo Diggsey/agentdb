@@ -1,4 +1,5 @@
 #![deny(missing_docs)]
+#![allow(clippy::type_complexity)]
 //! # agentdb-system
 //!
 //! This crate provides a higher level interface to `agentdb-core`. The same concepts

@@ -47,7 +47,7 @@ impl Handle<MyMessage> for MyAgent {
         let old_value = std::mem::replace(&mut self.value, msg.value);
         context.send(
             MY_INDEX,
-            agent_index::Update::update(
+            agent_index::Update::change(
                 Prepacked::new(&old_value),
                 Prepacked::new(&self.value),
                 ref_.into(),

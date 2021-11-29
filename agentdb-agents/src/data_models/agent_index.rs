@@ -102,7 +102,7 @@ impl Update {
         }
     }
     /// Convenience method to construct an update with a pair of symmetric "Remove"/"Add" operations.
-    pub fn update(old_key: Prepacked, new_key: Prepacked, value: DynAgentRef) -> Self {
+    pub fn change(old_key: Prepacked, new_key: Prepacked, value: DynAgentRef) -> Self {
         Self {
             ops: vec![
                 UpdateOp::Remove {

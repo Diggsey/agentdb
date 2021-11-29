@@ -36,21 +36,23 @@ where
     ) -> BoxFuture<'a, Result<bool, Error>>,
 }
 
-impl<A: Agent> HandlerDyn<A>
+impl<A: Agent + HandleDyn> Default for HandlerDyn<A>
 where
     Self: inventory::Collect,
 {
-    #[doc(hidden)]
-    pub fn new() -> Self
-    where
-        A: HandleDyn,
-    {
+    fn default() -> Self {
         Self {
             handle_dyn_fn: |state, ref_, message, context| {
                 A::handle_dyn(state, ref_, message, context)
             },
         }
     }
+}
+
+impl<A: Agent> HandlerDyn<A>
+where
+    Self: inventory::Collect,
+{
     pub(crate) async fn call(
         state: &mut A,
         ref_: AgentRef<A>,
@@ -60,7 +62,7 @@ where
     where
         Self: inventory::Collect,
     {
-        for handler in inventory::iter::<Self> {
+        if let Some(handler) = inventory::iter::<Self>.into_iter().next() {
             return (handler.handle_dyn_fn)(state, ref_, message, context).await;
         }
         Err(Error(anyhow!("No handler for this message/agent pairing")))

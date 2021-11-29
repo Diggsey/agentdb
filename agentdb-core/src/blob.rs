@@ -105,8 +105,8 @@ pub(crate) fn watch_stream_internal(
                         root,
                         move |tx, root| {
                             async move {
-                                let blob = load_internal(tx, &root, blob_id, true).await?;
-                                let fut = watch_internal(tx, &root, blob_id);
+                                let blob = load_internal(tx, root, blob_id, true).await?;
+                                let fut = watch_internal(tx, root, blob_id);
                                 Ok::<_, Error>((blob, Some(fut)))
                             }
                             .boxed()

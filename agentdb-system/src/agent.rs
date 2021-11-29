@@ -1,6 +1,6 @@
 use agentdb_core::Error;
 use async_trait::async_trait;
-use mopa::mopafy;
+use downcast_rs::{impl_downcast, DowncastSync};
 
 use crate::agent_ref::DynAgentRef;
 use crate::context::Context;
@@ -42,7 +42,7 @@ where
 /// The trait implemented by agent types using the `#[agent(...)]` attribute macro.
 #[typetag::serde]
 #[async_trait]
-pub trait Agent: mopa::Any + Send + Sync {
+pub trait Agent: DowncastSync {
     /// Returns `true` if this agent can "stall" without impacting the overall availability
     /// of the system. In the event that an operation's work limit is exceeded, the operation
     /// will prefer to stall at a frangible agent if possible.
@@ -70,4 +70,4 @@ pub trait Agent: mopa::Any + Send + Sync {
     ) -> Result<bool, Error>;
 }
 
-mopafy!(Agent);
+impl_downcast!(sync Agent);

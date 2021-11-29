@@ -69,7 +69,7 @@ macro_rules! declare_message {
 macro_rules! declare_constructor {
     ($t:ty) => {
         $crate::hidden::inventory::submit! {
-            $crate::hidden::Constructor::<$t>::new()
+            $crate::hidden::Constructor::<$t>::default()
         }
     };
 }
@@ -79,7 +79,7 @@ macro_rules! declare_constructor {
 macro_rules! declare_destructor {
     ($t:ty) => {
         $crate::hidden::inventory::submit! {
-            $crate::hidden::Destructor::<$t>::new()
+            $crate::hidden::Destructor::<$t>::default()
         }
     };
 }
@@ -101,7 +101,7 @@ macro_rules! declare_handler {
 macro_rules! declare_dyn_handler {
     ($a:ty) => {
         $crate::hidden::inventory::submit! {
-            $crate::hidden::HandlerDyn::<$a>::new()
+            $crate::hidden::HandlerDyn::<$a>::default()
         }
     };
 }

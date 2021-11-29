@@ -26,9 +26,7 @@ use crate::{
 };
 
 /// Look for AgentDB roots present in the provided database.
-pub fn search_for_roots<'a>(
-    global: &'a Arc<Global>,
-) -> impl Stream<Item = Result<String, Error>> + 'a {
+pub fn search_for_roots(global: &Arc<Global>) -> impl Stream<Item = Result<String, Error>> + '_ {
     global
         .db()
         .transact_boxed(
@@ -219,7 +217,7 @@ async fn describe_clients(
             partitions: PartitionAssignment {
                 client_count,
                 client_index: i as u32,
-                partition_range: partition_range.clone(),
+                partition_range,
             }
             .range(),
         })
@@ -342,7 +340,7 @@ pub async fn describe_root(global: &Global, root: &str) -> Result<RootDesc, Erro
                     )
                     .await?;
 
-                    let agent_count = calculate_agent_count(tx, &root).await?;
+                    let agent_count = calculate_agent_count(tx, root).await?;
 
                     Ok(RootDesc {
                         partition_range_send: convert_range(partition_range_send),

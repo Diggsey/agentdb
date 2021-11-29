@@ -26,19 +26,21 @@ where
     ) -> BoxFuture<'a, Result<(), Error>>,
 }
 
-impl<A: Agent> Destructor<A>
+impl<A: Agent + Destruct> Default for Destructor<A>
 where
     Self: inventory::Collect,
 {
-    #[doc(hidden)]
-    pub fn new() -> Self
-    where
-        A: Destruct,
-    {
+    fn default() -> Self {
         Self {
             destruct_fn: |state, ref_, context| A::destruct(state, ref_, context),
         }
     }
+}
+
+impl<A: Agent> Destructor<A>
+where
+    Self: inventory::Collect,
+{
     pub(crate) async fn call(
         state: A,
         ref_: AgentRef<A>,
@@ -47,7 +49,7 @@ where
     where
         Self: inventory::Collect,
     {
-        for destructor in inventory::iter::<Self> {
+        if let Some(destructor) = inventory::iter::<Self>.into_iter().next() {
             return (destructor.destruct_fn)(state, ref_, context).await;
         }
         Ok(())

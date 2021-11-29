@@ -18,7 +18,7 @@ async fn system_fn_fallible(mut input: StateFnInput<'_>) -> Result<StateFnOutput
     };
 
     let root = Root::from_name(input.root);
-    let messages = std::mem::replace(&mut input.messages, Vec::new());
+    let messages = std::mem::take(&mut input.messages);
     let mut context = Context::new(&input, root);
 
     let agent_ref = DynAgentRef { id: input.id, root };

@@ -63,19 +63,21 @@ where
     ) -> BoxFuture<'a, Result<Option<DynAgent>, Error>>,
 }
 
-impl<C: Message> Constructor<C>
+impl<C: Message + DynConstruct> Default for Constructor<C>
 where
     Self: inventory::Collect,
 {
-    #[doc(hidden)]
-    pub fn new() -> Self
-    where
-        C: DynConstruct,
-    {
+    fn default() -> Self {
         Self {
             construct_fn: |message, ref_, context| C::dyn_construct(message, ref_, context),
         }
     }
+}
+
+impl<C: Message> Constructor<C>
+where
+    Self: inventory::Collect,
+{
     pub(crate) async fn call(
         message: C,
         ref_: DynAgentRef,
@@ -84,7 +86,7 @@ where
     where
         Self: inventory::Collect,
     {
-        for constructor in inventory::iter::<Self> {
+        if let Some(constructor) = inventory::iter::<Self>.into_iter().next() {
             return (constructor.construct_fn)(message, ref_, context).await;
         }
         Ok(None)

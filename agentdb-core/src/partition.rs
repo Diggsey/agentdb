@@ -225,7 +225,7 @@ impl PartitionState {
                     &self.state_fn,
                     max_batch_size,
                 ),
-                |tx, &mut (global, root, partition, ref state_fn, ref mut max_batch_size)| {
+                |tx, &mut (global, root, partition, state_fn, ref mut max_batch_size)| {
                     async move {
                         // Automatically reduce batch size on failure
                         if *max_batch_size > 1 {
@@ -234,7 +234,7 @@ impl PartitionState {
 
                         // Load the initial agent state
                         let recipient_state =
-                            blob::load_internal(tx, &root, recipient.id, false).await?;
+                            blob::load_internal(tx, root, recipient.id, false).await?;
 
                         // Determine the range of keys where messages are batched
                         let mut recipient_range: RangeOption =
@@ -258,14 +258,14 @@ impl PartitionState {
                         for msg_hdr in all_msg_hdrs {
                             let inbound_msg = InboundMessage {
                                 operation_id: msg_hdr.operation_id,
-                                data: blob::load_internal(tx, &root, msg_hdr.blob_id, true)
+                                data: blob::load_internal(tx, root, msg_hdr.blob_id, true)
                                     .await?
                                     .ok_or_else(|| {
                                         Error(anyhow!("Blob not found: {}", msg_hdr.blob_id))
                                     })?,
                             };
                             all_msgs.push(inbound_msg);
-                            blob::delete_internal(tx, &root, msg_hdr.blob_id);
+                            blob::delete_internal(tx, root, msg_hdr.blob_id);
                         }
 
                         log::info!(
@@ -289,9 +289,9 @@ impl PartitionState {
                         let exist_after = state_fn_output.state.is_some();
 
                         if let Some(state) = state_fn_output.state {
-                            blob::store_internal(tx, &root, recipient.id, &state);
+                            blob::store_internal(tx, root, recipient.id, &state);
                         } else {
-                            blob::delete_internal(tx, &root, recipient.id);
+                            blob::delete_internal(tx, root, recipient.id);
 
                             // Also clean up anything this agent stored in its user directory
                             root.user_dir

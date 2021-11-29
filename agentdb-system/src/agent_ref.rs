@@ -106,10 +106,7 @@ pub struct AgentRef<A> {
 impl<A: Agent> Copy for AgentRef<A> {}
 impl<A: Agent> Clone for AgentRef<A> {
     fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-            phantom: self.phantom.clone(),
-        }
+        *self
     }
 }
 impl<A: Agent> Debug for AgentRef<A> {

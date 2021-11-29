@@ -168,6 +168,12 @@ impl ExternalContext {
     }
 }
 
+impl Default for ExternalContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Trait implemented by contexts which can send messages into
 /// the AgentDB system.
 pub trait ContextLike {

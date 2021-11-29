@@ -148,7 +148,7 @@ impl From<admin::RootDesc> for RootDesc {
             partitions: other
                 .partitions()
                 .iter()
-                .map(|(k, v)| (k.clone(), v.clone().into()))
+                .map(|(&k, v)| (k, v.clone().into()))
                 .collect(),
             agent_count: other.agent_count(),
         }
@@ -190,7 +190,7 @@ fn load_blob(
             .transact_boxed(
                 (root, con.global.clone()),
                 move |tx, (root, global)| {
-                    async move { blob::load(tx, global, &root, blob_id, true).await }.boxed()
+                    async move { blob::load(tx, global, root, blob_id, true).await }.boxed()
                 },
                 TransactOption::idempotent(),
             )
@@ -290,17 +290,15 @@ fn list_subspace(
                 (from, prefix),
                 |tx, (from, prefix)| {
                     async move {
-                        let subspace = Subspace::from_bytes(&prefix);
+                        let subspace = Subspace::from_bytes(prefix);
                         let (mut start, mut end) = subspace.range();
                         if reverse {
                             if *from < end {
                                 end = from.clone();
                             }
-                        } else {
-                            if *from > start {
-                                start = from.clone();
-                                start.push(0);
-                            }
+                        } else if *from > start {
+                            start = from.clone();
+                            start.push(0);
                         }
                         let mut range: RangeOption = (start, end).into();
                         range.limit = Some(limit as usize);
