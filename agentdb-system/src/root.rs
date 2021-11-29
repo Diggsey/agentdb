@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use parking_lot::{const_mutex, Mutex};
 use serde::{de::Visitor, Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -23,15 +24,31 @@ impl Root {
         self.name
     }
 
-    /// Attempt to get the root with the given name. The root must
-    /// have been defined somewhere in this crate or its dependencies.
-    pub fn from_name(name: &str) -> Option<Self> {
+    /// Obtain a root with the given name. If no root with this name exists,
+    /// a new root will be allocated. The memory backing roots will never be
+    /// freed, so avoid using roots with dynamically generated names, as this
+    /// will leak memory.
+    pub fn from_name(name: &str) -> Self {
+        static CRITICAL_SECTION: Mutex<()> = const_mutex(());
+
         for &root in inventory::iter::<Root> {
             if root.name == name {
-                return Some(root);
+                return root;
             }
         }
-        None
+
+        let _guard = CRITICAL_SECTION.lock();
+        // Check again now that we've got the lock, to avoid the root
+        // being allocated twice.
+        for &root in inventory::iter::<Root> {
+            if root.name == name {
+                return root;
+            }
+        }
+
+        let new_root = Root::new(Box::leak(name.to_owned().into_boxed_str()));
+        inventory::submit(new_root);
+        new_root
     }
 
     /// Const-construct an AgentRef directly form this root and an agent ID, encoded as a `u128`.
@@ -73,8 +90,7 @@ impl<'de> Visitor<'de> for RootVisitor {
     where
         E: serde::de::Error,
     {
-        Root::from_name(v)
-            .ok_or_else(|| serde::de::Error::invalid_value(serde::de::Unexpected::Str(v), &self))
+        Ok(Root::from_name(v))
     }
 
     fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>

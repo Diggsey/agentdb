@@ -331,7 +331,7 @@ impl Handle<QueryExact> for AgentIndex {
             res.push(values.get(0).and_then(|v| {
                 let (_, agent_root, agent_id) = self.index_space.unpack(v.key()).ok()?;
                 Some(DynAgentRef::from_parts(
-                    Root::from_name(&agent_root)?,
+                    Root::from_name(&agent_root),
                     agent_id,
                 ))
             }));
@@ -388,7 +388,7 @@ impl Handle<QueryRange> for AgentIndex {
                 let (key, agent_root, agent_id) = self.index_space.unpack(v.key()).ok()?;
                 Some((
                     key,
-                    DynAgentRef::from_parts(Root::from_name(&agent_root)?, agent_id),
+                    DynAgentRef::from_parts(Root::from_name(&agent_root), agent_id),
                 ))
             })
             .collect();

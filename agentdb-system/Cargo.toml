@@ -26,6 +26,7 @@ anymap2 = "0.13.0"
 lazy_static = "1.4.0"
 postcard = { version = "0.7.2", features = ["use-std"] }
 log = "0.4.14"
+parking_lot = "0.11.2"
 
 [dev-dependencies]
 pretty_env_logger = "0.4.0"

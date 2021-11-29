@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use agentdb_core::cancellation::CancellableHandle;
 use agentdb_core::{Error, Global, StateFnInput, StateFnOutput};
-use anyhow::anyhow;
 
 use crate::agent::DynAgent;
 use crate::context::Context;
@@ -18,7 +17,7 @@ async fn system_fn_fallible(mut input: StateFnInput<'_>) -> Result<StateFnOutput
         None
     };
 
-    let root = Root::from_name(input.root).ok_or_else(|| Error(anyhow!("Unknown root")))?;
+    let root = Root::from_name(input.root);
     let messages = std::mem::replace(&mut input.messages, Vec::new());
     let mut context = Context::new(&input, root);
 
