@@ -214,7 +214,7 @@ impl Construct for Stat {
     async fn construct(
         self,
         ref_: AgentRef<AgentIndex>,
-        context: &mut Context<'_>,
+        context: &mut Context,
     ) -> Result<Option<AgentIndex>, Error> {
         let mut state = AgentIndex::new(context).await?;
         Ok(if state.handle(ref_, self, context).await? {
@@ -251,7 +251,7 @@ impl Construct for Update {
     async fn construct(
         self,
         ref_: AgentRef<AgentIndex>,
-        context: &mut Context<'_>,
+        context: &mut Context,
     ) -> Result<Option<AgentIndex>, Error> {
         let mut state = AgentIndex::new(context).await?;
         Ok(if state.handle(ref_, self, context).await? {
@@ -302,7 +302,7 @@ impl Construct for QueryExact {
     async fn construct(
         self,
         ref_: AgentRef<AgentIndex>,
-        context: &mut Context<'_>,
+        context: &mut Context,
     ) -> Result<Option<AgentIndex>, Error> {
         let mut state = AgentIndex::new(context).await?;
         Ok(if state.handle(ref_, self, context).await? {
@@ -354,7 +354,7 @@ impl Construct for QueryRange {
     async fn construct(
         self,
         ref_: AgentRef<AgentIndex>,
-        context: &mut Context<'_>,
+        context: &mut Context,
     ) -> Result<Option<AgentIndex>, Error> {
         let mut state = AgentIndex::new(context).await?;
         Ok(if state.handle(ref_, self, context).await? {

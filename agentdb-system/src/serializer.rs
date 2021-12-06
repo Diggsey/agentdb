@@ -6,7 +6,7 @@ pub use JsonSerializer as DefaultSerializer;
 pub struct JsonSerializer;
 
 impl Serializer for JsonSerializer {
-    fn serialize<T: Serialize>(&self, value: &T) -> Result<Vec<u8>, Error> {
+    fn serialize<T: Serialize + ?Sized>(&self, value: &T) -> Result<Vec<u8>, Error> {
         Ok(serde_json::to_vec(value)?)
     }
 
@@ -18,7 +18,7 @@ impl Serializer for JsonSerializer {
 pub struct PostcardSerializer;
 
 impl Serializer for PostcardSerializer {
-    fn serialize<T: Serialize>(&self, value: &T) -> Result<Vec<u8>, Error> {
+    fn serialize<T: Serialize + ?Sized>(&self, value: &T) -> Result<Vec<u8>, Error> {
         Ok(postcard::to_stdvec(value)?)
     }
 
@@ -28,6 +28,6 @@ impl Serializer for PostcardSerializer {
 }
 
 pub trait Serializer {
-    fn serialize<T: Serialize>(&self, value: &T) -> Result<Vec<u8>, Error>;
+    fn serialize<T: Serialize + ?Sized>(&self, value: &T) -> Result<Vec<u8>, Error>;
     fn deserialize<T: DeserializeOwned>(&self, slice: &[u8]) -> Result<T, Error>;
 }

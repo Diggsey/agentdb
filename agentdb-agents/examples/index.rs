@@ -26,7 +26,7 @@ impl Construct for MyMessage {
     async fn construct(
         self,
         ref_: AgentRef<MyAgent>,
-        context: &mut Context<'_>,
+        context: &mut Context,
     ) -> Result<Option<MyAgent>, Error> {
         context.send(
             MY_INDEX,

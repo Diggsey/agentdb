@@ -1,5 +1,6 @@
 use agentdb_core::Error;
 use async_trait::async_trait;
+use downcast_rs::{impl_downcast, DowncastSync};
 
 use crate::agent::DynAgent;
 use crate::agent_ref::DynAgentRef;
@@ -36,7 +37,7 @@ where
 /// Trait implemented by message types.
 #[typetag::serde]
 #[async_trait]
-pub trait Message: Send + Sync + 'static {
+pub trait Message: DowncastSync {
     #[doc(hidden)]
     async fn _internal_deliver(
         self: Box<Self>,
@@ -45,3 +46,5 @@ pub trait Message: Send + Sync + 'static {
         context: &mut Context,
     ) -> Result<(), Error>;
 }
+
+impl_downcast!(sync Message);

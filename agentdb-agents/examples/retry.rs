@@ -40,7 +40,7 @@ impl Construct for MyConstructor {
     async fn construct(
         self,
         ref_: AgentRef<MyAgent>,
-        context: &mut Context<'_>,
+        context: &mut Context,
     ) -> Result<Option<MyAgent>, Error> {
         context.construct(
             MY_ROOT,

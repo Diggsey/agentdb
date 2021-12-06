@@ -154,7 +154,7 @@ struct MessageHeader {
 }
 
 /// A single message received by the agent.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct InboundMessage {
     /// The ID of the operation this message belongs to.
     pub operation_id: Uuid,
@@ -162,15 +162,26 @@ pub struct InboundMessage {
     pub data: Vec<u8>,
 }
 
-/// The input to the state function.
-#[derive(Debug)]
-pub struct StateFnInput<'a> {
+#[derive(Debug, Copy, Clone)]
+struct StateFnLiveMode<'a> {
     operation_ts: &'a TypedSubspace<Uuid>,
     user_dir: &'a DirectoryOutput,
+    global: &'a Global,
+    tx: &'a Transaction,
+}
+
+#[derive(Debug, Clone)]
+enum StateFnMode<'a> {
+    Live(StateFnLiveMode<'a>),
+    Test,
+}
+
+/// The input to the state function.
+#[derive(Debug, Clone)]
+pub struct StateFnInput<'a> {
+    mode: StateFnMode<'a>,
     /// The current root.
     pub root: &'a str,
-    /// The current FoundationDB transaction.
-    pub tx: &'a Transaction,
     /// The ID of the agent being processed.
     pub id: Uuid,
     /// The current state of the agent, or `None` if the agent does not exist.
@@ -180,14 +191,51 @@ pub struct StateFnInput<'a> {
 }
 
 impl<'a> StateFnInput<'a> {
+    /// Construct a test input for the state function. Attempting to access the
+    /// FoundationDB transaction or global object will cause a panic.
+    pub fn test(
+        root: &'a str,
+        id: Uuid,
+        state: Option<Vec<u8>>,
+        messages: Vec<InboundMessage>,
+    ) -> Self {
+        Self {
+            mode: StateFnMode::Test,
+            root,
+            id,
+            state,
+            messages,
+        }
+    }
+    fn assume_live(&self) -> StateFnLiveMode<'a> {
+        if let StateFnMode::Live(live) = self.mode {
+            live
+        } else {
+            panic!("Attempted to use FoundationDB from a test context")
+        }
+    }
     /// Obtain a FoundationDB directory for sole use by this agent.
     /// This can be used when the agent wants to store more state than can be
     /// efficiently loaded/saved in one go.
+    /// Will panic if called from a test context.
     pub async fn user_dir(&self) -> Result<DirectoryOutput, Error> {
-        self.user_dir
-            .create_or_open(self.tx, vec![self.id.to_string()], None, None)
+        let mode = self.assume_live();
+        mode.user_dir
+            .create_or_open(mode.tx, vec![self.id.to_string()], None, None)
             .await
             .map_err(Error::from_dir)
+    }
+
+    /// Obtain the current FoundationDB transaction. Will panic if called from
+    /// a test context.
+    pub fn tx(&self) -> &'a Transaction {
+        self.assume_live().tx
+    }
+
+    /// Obtain the global object. Will panic if called from
+    /// a test context.
+    pub fn global(&self) -> &'a Global {
+        self.assume_live().global
     }
 
     /// Returns the clearance level of the given operation: how many messages
@@ -195,16 +243,20 @@ impl<'a> StateFnInput<'a> {
     /// an error. If no messages are sent, the clearance level will gradually
     /// increase over time.
     pub async fn clearance(&self, operation_id: Uuid) -> Result<i64, Error> {
-        let current_ts = Timestamp::now().millis();
-        let initial_operation_ts = current_ts - INITIAL_TS_OFFSET;
-        let key = self.operation_ts.pack(&operation_id);
-        let operation_ts = self
-            .tx
-            .get(&key, true)
-            .await?
-            .map(|slice| LittleEndian::read_i64(&slice))
-            .unwrap_or(initial_operation_ts);
-        Ok((current_ts - operation_ts) / MS_PER_MSG_PER_OP)
+        if let StateFnMode::Live(live) = self.mode {
+            let current_ts = Timestamp::now().millis();
+            let initial_operation_ts = current_ts - INITIAL_TS_OFFSET;
+            let key = live.operation_ts.pack(&operation_id);
+            let operation_ts = live
+                .tx
+                .get(&key, true)
+                .await?
+                .map(|slice| LittleEndian::read_i64(&slice))
+                .unwrap_or(initial_operation_ts);
+            Ok((current_ts - operation_ts) / MS_PER_MSG_PER_OP)
+        } else {
+            Ok(INITIAL_TS_OFFSET / MS_PER_MSG_PER_OP)
+        }
     }
 }
 

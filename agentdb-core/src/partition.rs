@@ -20,7 +20,8 @@ use crate::{
         get_first_in_range, load_partition_range, load_value, move_entries,
         partition_for_recipient, save_value, Timestamp,
     },
-    HookContext, InboundMessage, MessageHeader, StateFn, StateFnInput, MAX_BATCH_SIZE,
+    HookContext, InboundMessage, MessageHeader, StateFn, StateFnInput, StateFnLiveMode,
+    StateFnMode, MAX_BATCH_SIZE,
 };
 
 const MAX_POLL_INTERVAL_SECS: u64 = 120;
@@ -275,10 +276,13 @@ impl PartitionState {
                         );
 
                         let state_fn_input = StateFnInput {
-                            user_dir: &root.user_dir,
-                            operation_ts: &root.operation_ts,
+                            mode: StateFnMode::Live(StateFnLiveMode {
+                                user_dir: &root.user_dir,
+                                operation_ts: &root.operation_ts,
+                                global,
+                                tx,
+                            }),
                             root: &root.root,
-                            tx,
                             id: recipient.id,
                             state: recipient_state,
                             messages: all_msgs,

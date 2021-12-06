@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
 use foundationdb::{
     directory::{directory_layer::DirectoryLayer, Directory, DirectoryOutput},
@@ -19,6 +19,12 @@ pub struct Global {
     pub(crate) db: Arc<Database>,
     pub(crate) dir: DirectoryLayer,
     pub(crate) roots: RwLock<HashMap<String, Arc<RootSpace>>>,
+}
+
+impl Debug for Global {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Global").field("dir", &self.dir).finish()
+    }
 }
 
 fn read_rwlock<T, R>(lock: &RwLock<T>, f: impl FnOnce(&T) -> R) -> R {

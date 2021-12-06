@@ -17,7 +17,7 @@ pub trait DynConstruct: Message {
     async fn dyn_construct(
         self,
         ref_: DynAgentRef,
-        context: &mut Context<'_>,
+        context: &mut Context,
     ) -> Result<Option<DynAgent>, Error>;
 }
 
@@ -32,7 +32,7 @@ pub trait Construct: DynConstruct {
     async fn construct(
         self,
         ref_: AgentRef<Self::Agent>,
-        context: &mut Context<'_>,
+        context: &mut Context,
     ) -> Result<Option<Self::Agent>, Error>;
 }
 
@@ -41,7 +41,7 @@ impl<M: Construct> DynConstruct for M {
     async fn dyn_construct(
         self,
         ref_: DynAgentRef,
-        context: &mut Context<'_>,
+        context: &mut Context,
     ) -> Result<Option<DynAgent>, Error> {
         if M::Agent::is_frangible() {
             context.require_clearance().await?;

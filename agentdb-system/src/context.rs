@@ -52,10 +52,10 @@ impl<'a> ContextLike for Context<'a> {
 }
 
 impl<'a> Context<'a> {
-    pub(crate) fn new(input: &'a StateFnInput<'a>, root: Root) -> Self {
+    pub(crate) fn new(input: &'a StateFnInput<'a>) -> Self {
         Self {
             input,
-            root,
+            root: Root::from_name(input.root),
             operation_id: Uuid::nil(),
             messages: Vec::new(),
             commit_hooks: Vec::new(),
@@ -70,13 +70,19 @@ impl<'a> Context<'a> {
     pub fn run_on_commit(&mut self, f: impl FnOnce(HookContext) + Send + Sync + 'static) {
         self.dyn_run_on_commit(Box::new(f))
     }
-    /// Obtain the current FoundationDB transaction
+    /// Obtain the current FoundationDB transaction. Panics if called from a
+    /// test context.
     pub fn tx(&self) -> &'a Transaction {
-        self.input.tx
+        self.input.tx()
     }
-    /// Ontain the current AgentDB root.
+    /// Obtain the current AgentDB root.
     pub fn root(&self) -> Root {
         self.root
+    }
+    /// Obtain the global object. Panics if called from a
+    /// test context.
+    pub fn global(&self) -> &'a Global {
+        self.input.global()
     }
     /// Obtain a FoundationDB directory which is unique to this agent, for storing custom
     /// data which is too large to be stored as part of the agent's normal state.

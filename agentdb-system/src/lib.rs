@@ -57,6 +57,7 @@ mod message;
 mod root;
 mod serializer;
 mod system;
+pub mod test;
 mod utils;
 
 pub use agentdb_macros::*;

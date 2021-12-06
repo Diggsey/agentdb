@@ -10,18 +10,22 @@ use crate::root::Root;
 use crate::serializer::{DefaultSerializer, Serializer};
 use crate::DynAgentRef;
 
-async fn system_fn_fallible(mut input: StateFnInput<'_>) -> Result<StateFnOutput, Error> {
+pub(crate) async fn system_fn_fallible(
+    mut input: StateFnInput<'_>,
+) -> Result<StateFnOutput, Error> {
     let mut maybe_agent_state = if let Some(state) = &input.state {
         Some(DefaultSerializer.deserialize::<DynAgent>(state)?)
     } else {
         None
     };
 
-    let root = Root::from_name(input.root);
     let messages = std::mem::take(&mut input.messages);
-    let mut context = Context::new(&input, root);
+    let mut context = Context::new(&input);
 
-    let agent_ref = DynAgentRef { id: input.id, root };
+    let agent_ref = DynAgentRef {
+        id: input.id,
+        root: context.root(),
+    };
 
     for inbound_msg in messages {
         context.operation_id = inbound_msg.operation_id;

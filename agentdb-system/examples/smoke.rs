@@ -21,7 +21,7 @@ impl Construct for MyMessage {
     async fn construct(
         self,
         _ref_: AgentRef<MyAgent>,
-        _context: &mut Context<'_>,
+        _context: &mut Context,
     ) -> Result<Option<MyAgent>, Error> {
         Ok(Some(MyAgent))
     }

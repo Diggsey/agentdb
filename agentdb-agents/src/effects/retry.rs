@@ -167,7 +167,7 @@ impl Construct for DoRetry {
     async fn construct(
         self,
         ref_: AgentRef<Retry>,
-        context: &mut Context<'_>,
+        context: &mut Context,
     ) -> Result<Option<Retry>, Error> {
         let mut agent = Retry {
             config: self,
