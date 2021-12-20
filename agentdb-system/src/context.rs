@@ -1,5 +1,5 @@
 use agentdb_core::{
-    send_messages, Error, Global, HookContext, OutboundMessage, StateFnInput, Timestamp,
+    id, send_messages, Error, Global, HookContext, OutboundMessage, StateFnInput, Timestamp,
 };
 use anyhow::anyhow;
 use foundationdb::directory::DirectoryOutput;
@@ -12,7 +12,6 @@ use crate::constructor::{Construct, Constructor};
 use crate::handler::{Handle, Handler};
 use crate::message::{DynMessage, Message};
 use crate::root::Root;
-use crate::serializer::{DefaultSerializer, Serializer};
 
 // Require the ability to burst 500 messages for safe clearance
 const MIN_SAFE_CLEARANCE: i64 = 500;
@@ -41,7 +40,7 @@ impl<'a> ContextLike for Context<'a> {
             recipient_id: handle.id(),
             operation_id: self.operation_id,
             when,
-            content: DefaultSerializer.serialize(&message)?,
+            content: message.0,
         });
         Ok(())
     }
@@ -121,7 +120,7 @@ impl ContextLike for ExternalContext {
             recipient_id: handle.id(),
             operation_id: self.operation_id,
             when,
-            content: DefaultSerializer.serialize(&message)?,
+            content: message.0,
         });
         Ok(())
     }
@@ -136,7 +135,7 @@ impl ExternalContext {
     /// with a new operation.
     pub fn new() -> Self {
         Self {
-            operation_id: Uuid::new_v4(),
+            operation_id: id::new(),
             messages: Vec::new(),
         }
     }
@@ -233,7 +232,7 @@ pub trait ContextLike {
     ) -> Result<DynAgentRef, Error> {
         let handle = DynAgentRef {
             root,
-            id: Uuid::new_v4(),
+            id: id::new(),
         };
         self.dyn_send_at(handle, message_fn(handle), when)?;
         Ok(handle)
@@ -261,7 +260,7 @@ pub trait ContextLike {
     where
         Handler<M>: inventory::Collect,
     {
-        self.dyn_send_at(handle.into(), Box::new(message), when)
+        self.dyn_send_at(handle.into(), message.into(), when)
     }
 
     /// Immediately construct an agent.
@@ -315,7 +314,7 @@ pub trait ContextLike {
         Ok(self
             .dyn_construct_at_with(
                 root,
-                |ref_| Box::new(message_fn(ref_.unchecked_downcast())),
+                |ref_| message_fn(ref_.unchecked_downcast()).into(),
                 when,
             )?
             .unchecked_downcast())

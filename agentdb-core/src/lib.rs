@@ -122,6 +122,7 @@ pub mod cancellation;
 mod client;
 mod directories;
 mod error;
+pub mod id;
 mod message;
 mod partition;
 mod prepacked;

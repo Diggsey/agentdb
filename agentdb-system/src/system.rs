@@ -5,10 +5,10 @@ use agentdb_core::{Error, Global, StateFnInput, StateFnOutput};
 
 use crate::agent::DynAgent;
 use crate::context::Context;
-use crate::message::DynMessage;
+use crate::message::deliver_unknown_message;
 use crate::root::Root;
 use crate::serializer::{DefaultSerializer, Serializer};
-use crate::DynAgentRef;
+use crate::{DynAgentRef, DynMessage, Message};
 
 pub(crate) async fn system_fn_fallible(
     mut input: StateFnInput<'_>,
@@ -29,9 +29,24 @@ pub(crate) async fn system_fn_fallible(
 
     for inbound_msg in messages {
         context.operation_id = inbound_msg.operation_id;
-        let msg = DefaultSerializer.deserialize::<DynMessage>(&inbound_msg.data)?;
-        msg._internal_deliver(agent_ref, &mut maybe_agent_state, &mut context)
-            .await?;
+        match DefaultSerializer.deserialize::<Box<dyn Message>>(&inbound_msg.data) {
+            Ok(msg) => {
+                msg._internal_deliver(agent_ref, &mut maybe_agent_state, &mut context)
+                    .await?;
+            }
+            Err(e) if e.to_string().starts_with("unknown variant") => {
+                // Allow delivery of message types that might not be known to
+                // our crate.
+                deliver_unknown_message(
+                    DynMessage(inbound_msg.data),
+                    agent_ref,
+                    &mut maybe_agent_state,
+                    &mut context,
+                )
+                .await?;
+            }
+            Err(e) => return Err(e),
+        }
     }
 
     let commit_hooks = context.commit_hooks;

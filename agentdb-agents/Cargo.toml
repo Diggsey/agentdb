@@ -16,6 +16,7 @@ foundationdb = { git = "https://github.com/Diggsey/foundationdb-rs.git", branch 
     "embedded-fdb-include",
 ] }
 futures = "0.3.10"
+anyhow = "1.0.51"
 
 [dev-dependencies]
 pretty_env_logger = "0.4.0"

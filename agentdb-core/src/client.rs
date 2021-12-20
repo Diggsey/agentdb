@@ -12,7 +12,7 @@ use crate::directories::{Global, RootSpace};
 use crate::message::INITIAL_TS_OFFSET;
 use crate::partition::partition_task;
 use crate::utils::load_partition_range;
-use crate::{Error, StateFn, Timestamp, GC_INTERVAL, HEARTBEAT_INTERVAL};
+use crate::{id, Error, StateFn, Timestamp, GC_INTERVAL, HEARTBEAT_INTERVAL};
 
 // Collect operations more than 5 minutes old
 const GC_AGE_MS: i64 = (1000 * 60 * 5) + INITIAL_TS_OFFSET;
@@ -228,7 +228,7 @@ pub async fn client_task(
     mut cancellation: Cancellation,
 ) -> Result<(), Error> {
     let root = global.root(&root).await?;
-    let client_id = Uuid::new_v4();
+    let client_id = id::new();
     let mut client_state = ClientState::new(name, global, root, client_id, state_fn);
     let mut interval = tokio::time::interval(HEARTBEAT_INTERVAL);
     let mut gc_interval = tokio::time::interval(GC_INTERVAL);

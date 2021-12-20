@@ -65,7 +65,7 @@ pub use agentdb_macros::*;
 pub use agent::{Agent, DynAgent};
 pub use agent_ref::{AgentRef, DynAgentRef};
 pub use agentdb_core::{
-    default_client_name, Error, Global, HookContext, Prepacked, Timestamp, TypedSubspace,
+    default_client_name, id, Error, Global, HookContext, Prepacked, Timestamp, TypedSubspace,
 };
 pub use constructor::{Construct, DynConstruct};
 pub use context::{CommitHook, Context, ContextLike, ExternalContext};

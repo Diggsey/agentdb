@@ -78,7 +78,7 @@ where
             }
         }
         state
-            ._internal_handle_dyn(ref_, Box::new(message), context)
+            ._internal_handle_dyn(ref_, message.into(), context)
             .await
     }
 }

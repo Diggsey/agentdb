@@ -90,10 +90,11 @@ impl Retry {
                 // delete ourselves.
                 context.dyn_send(
                     self.config.caller,
-                    Box::new(EffectFailure {
+                    EffectFailure {
                         ref_: ref_.into(),
                         reason: EffectFailureReason::MaxAttemptsExceeded,
-                    }),
+                    }
+                    .into(),
                 )?;
                 return Ok(true);
             }
@@ -180,10 +181,11 @@ impl Construct for DoRetry {
             if let Some(timeout) = agent.config.timeout {
                 context.dyn_send_at(
                     ref_.into(),
-                    Box::new(EffectFailure {
+                    EffectFailure {
                         ref_: ref_.into(),
                         reason: EffectFailureReason::TimedOut,
-                    }),
+                    }
+                    .into(),
                     Timestamp::now() + timeout,
                 )?;
             }

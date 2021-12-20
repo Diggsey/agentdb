@@ -36,7 +36,7 @@ impl EffectContext {
     }
     /// Send a response to the operation
     pub async fn send_response(&self, message: impl Message) -> Result<(), Error> {
-        self.dyn_send_response(Box::new(message)).await
+        self.dyn_send_response(message.into()).await
     }
 }
 

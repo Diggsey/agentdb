@@ -8,7 +8,7 @@ use foundationdb::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::Notify;
+use crate::{Notify, RpcRequest, RpcResponse};
 
 type IndexSpace = TypedSubspace<(Prepacked, String, Uuid)>;
 
@@ -41,18 +41,16 @@ impl AgentIndex {
 #[message(name = "adb.data_models.agent_index.stat")]
 #[derive(Serialize, Deserialize)]
 pub struct Stat {
-    /// The ID of this query - used by the caller to correlate the response.
-    pub query_id: Uuid,
-    /// The agent which should receive the response.
-    pub caller: DynAgentRef,
+    /// RPC request header.
+    pub rpc: RpcRequest,
 }
 
 /// Obtain high-level information about the index
 #[message(name = "adb.data_models.agent_index.stat_response")]
 #[derive(Serialize, Deserialize)]
 pub struct StatResponse {
-    /// The ID sent in the initial `Stat` query.
-    pub query_id: Uuid,
+    /// RPC response header.
+    pub rpc: RpcResponse,
     /// The total number of agents stored in the index.
     pub count: u64,
 }
@@ -125,10 +123,8 @@ impl Update {
 #[message(name = "adb.data_models.agent_index.query_exact")]
 #[derive(Serialize, Deserialize)]
 pub struct QueryExact {
-    /// The ID of this query - used by the caller to correlate the response.
-    pub query_id: Uuid,
-    /// Where to send the response.
-    pub caller: DynAgentRef,
+    /// RPC request header.
+    pub rpc: RpcRequest,
     /// The list of keys to query. Results will be returned in the same order.
     pub keys: Vec<Prepacked>,
 }
@@ -138,8 +134,8 @@ pub struct QueryExact {
 #[message(name = "adb.data_models.agent_index.query_exact_response")]
 #[derive(Serialize, Deserialize)]
 pub struct QueryExactResponse {
-    /// The ID sent in the initial `QueryExact` query.
-    pub query_id: Uuid,
+    /// RPC response header.
+    pub rpc: RpcResponse,
     /// The ordered list of query results.
     pub values: Vec<Option<DynAgentRef>>,
 }
@@ -175,10 +171,8 @@ impl QueryRangeSelector {
 #[message(name = "adb.data_models.agent_index.query_range")]
 #[derive(Serialize, Deserialize)]
 pub struct QueryRange {
-    /// The ID of this query - used by the caller to correlate the response.
-    pub query_id: Uuid,
-    /// Where to send the response.
-    pub caller: DynAgentRef,
+    /// RPC request header.
+    pub rpc: RpcRequest,
     /// The lower bound of the query range, or `None` to indicate no lower bound.
     pub lower: Option<QueryRangeSelector>,
     /// The upper bound of the query range, or `None` to indicate no upper bound.
@@ -194,8 +188,8 @@ pub struct QueryRange {
 #[message(name = "adb.data_models.agent_index.query_range_response")]
 #[derive(Serialize, Deserialize)]
 pub struct QueryRangeResponse {
-    /// The ID sent in the initial `QueryRange` query.
-    pub query_id: Uuid,
+    /// RPC response header.
+    pub rpc: RpcResponse,
     /// The list of results, ordered according to the initial query.
     pub results: Vec<(Prepacked, DynAgentRef)>,
 }
@@ -233,12 +227,12 @@ impl Handle<Stat> for AgentIndex {
         msg: Stat,
         context: &mut Context,
     ) -> Result<bool, Error> {
-        context.dyn_send(
-            msg.caller,
-            Box::new(StatResponse {
-                query_id: msg.query_id,
+        msg.rpc.respond(
+            |rpc| StatResponse {
+                rpc,
                 count: self.count,
-            }),
+            },
+            context,
         )?;
         Ok(self.count == 0)
     }
@@ -336,13 +330,8 @@ impl Handle<QueryExact> for AgentIndex {
                 ))
             }));
         }
-        context.dyn_send(
-            msg.caller,
-            Box::new(QueryExactResponse {
-                query_id: msg.query_id,
-                values: res,
-            }),
-        )?;
+        msg.rpc
+            .respond(|rpc| QueryExactResponse { rpc, values: res }, context)?;
         Ok(self.count == 0)
     }
 }
@@ -393,13 +382,8 @@ impl Handle<QueryRange> for AgentIndex {
             })
             .collect();
 
-        context.dyn_send(
-            msg.caller,
-            Box::new(QueryRangeResponse {
-                query_id: msg.query_id,
-                results: res,
-            }),
-        )?;
+        msg.rpc
+            .respond(|rpc| QueryRangeResponse { rpc, results: res }, context)?;
         Ok(self.count == 0)
     }
 }

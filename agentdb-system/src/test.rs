@@ -1,7 +1,7 @@
 //! Utilities for testing agents
 use std::fmt::Debug;
 
-use agentdb_core::{Error, OutboundMessage, StateFnInput, StateFnOutput, Timestamp};
+use agentdb_core::{id, Error, OutboundMessage, StateFnInput, StateFnOutput, Timestamp};
 use uuid::Uuid;
 
 use crate::{
@@ -21,8 +21,8 @@ impl TestBuilder {
     /// Construct a new builder for the specified root
     pub fn new(root: Root) -> Self {
         Self {
-            input: StateFnInput::test(root.name(), Uuid::new_v4(), None, Vec::new()),
-            operation_id: Uuid::new_v4(),
+            input: StateFnInput::test(root.name(), id::new(), None, Vec::new()),
+            operation_id: id::new(),
         }
     }
     /// Use a specific ID for the agent under test, instead of an auto-generated ID
@@ -145,9 +145,7 @@ impl TestOutboundMessage<'_> {
     }
     /// Returns the content of this message.
     pub fn dyn_content(&self) -> DynMessage {
-        DefaultSerializer
-            .deserialize(&self.message.content)
-            .expect("Failed to deserialize message content")
+        DynMessage(self.message.content.clone())
     }
 
     /// Returns the content of this message. Panics if the message

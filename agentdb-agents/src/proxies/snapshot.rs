@@ -78,7 +78,7 @@ impl Construct for CreateSnapshot {
         context: &mut Context,
     ) -> Result<Option<Self::Agent>, Error> {
         let inner_ref = context.dyn_construct(ref_.root(), self.constructor)?;
-        context.dyn_send(inner_ref, Box::new(RegisterSnapshot { snapshot: ref_ }))?;
+        context.dyn_send(inner_ref, RegisterSnapshot { snapshot: ref_ }.into())?;
         Ok(Some(Snapshot {
             inner_ref,
             current_snapshot: None,

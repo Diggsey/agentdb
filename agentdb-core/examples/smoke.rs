@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use agentdb_core::{Global, OutboundMessage, StateFnInput, StateFnOutput, Timestamp};
+use agentdb_core::{id, Global, OutboundMessage, StateFnInput, StateFnOutput, Timestamp};
 use foundationdb::TransactOption;
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
@@ -65,7 +65,7 @@ async fn say_hello(global: &Global, id: Uuid, from: &str) -> anyhow::Result<()> 
                         &[OutboundMessage {
                             recipient_root: ROOT.into(),
                             recipient_id: id,
-                            operation_id: Uuid::new_v4(),
+                            operation_id: id::new(),
                             when: Timestamp::now(),
                             content,
                         }],
@@ -89,8 +89,8 @@ async fn main() -> anyhow::Result<()> {
 
     let global = Global::connect(None)?;
 
-    let agent_id1 = Uuid::new_v4();
-    let agent_id2 = Uuid::new_v4();
+    let agent_id1 = id::new();
+    let agent_id2 = id::new();
 
     say_hello(&global, agent_id1, "John").await?;
     say_hello(&global, agent_id1, "Jim").await?;

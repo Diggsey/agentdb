@@ -3,12 +3,12 @@ use std::collections::{hash_map, HashMap, HashSet};
 use anyhow::anyhow;
 use byteorder::{ByteOrder, LittleEndian};
 use foundationdb::{options::MutationType, tuple::Versionstamp, Transaction};
-use uuid::Uuid;
 
 use crate::{
     blob,
     directories::Global,
     error::Error,
+    id,
     partition::mark_partition_modified,
     utils::{load_partition_range, partition_for_recipient},
     MessageHeader, OutboundMessage, Timestamp,
@@ -45,7 +45,7 @@ pub async fn send_messages(
             .entry((&msg.recipient_root, msg.operation_id))
             .or_default() += 1;
 
-        let msg_id = Uuid::new_v4();
+        let msg_id = id::new();
         blob::store_internal(tx, &recipient_root, msg_id, &msg.content);
         let msg_hdr = postcard::to_stdvec(&MessageHeader {
             recipient_id: msg.recipient_id,

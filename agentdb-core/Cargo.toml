@@ -15,7 +15,7 @@ foundationdb = { git = "https://github.com/Diggsey/foundationdb-rs.git", branch 
 tokio = { version = "1.11.0", features = ["full"] }
 anyhow = { version = "1.0.43", features = ["backtrace"] }
 futures = "0.3.17"
-uuid = { version = "0.8.2", features = ["v4", "serde"] }
+uuid = { version = "0.8.2", features = ["v1", "v4", "serde"] }
 byteorder = "1.4.3"
 chrono = { version = "0.4.19", features = ["serde"] }
 log = "0.4.14"
@@ -24,6 +24,8 @@ postcard = { version = "0.7.2", features = ["use-std"] }
 thiserror = "1.0.29"
 hostname = "0.3.1"
 parking_lot = "0.11.2"
+rand = "0.8.4"
+lazy_static = "1.4.0"
 
 [dev-dependencies]
 pretty_env_logger = "0.4.0"

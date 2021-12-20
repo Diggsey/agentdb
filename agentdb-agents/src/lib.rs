@@ -9,11 +9,12 @@ use agentdb_system::*;
 use foundationdb::TransactOption;
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 pub mod data_models;
 pub mod effects;
 pub mod proxies;
+mod rpc;
+pub use rpc::*;
 
 /// Provides a generic way for one agent to notify another about some
 /// event. It stores and agent handle and a message, and will send the
@@ -34,7 +35,7 @@ impl Notify {
         M: Message,
         A: Agent + Handle<M>,
     {
-        Self::new_dyn(handle.into(), Box::new(message))
+        Self::new_dyn(handle.into(), message.into())
     }
     /// Construct a new instance with the provided agent and message of any type.
     pub fn new_dyn(handle: DynAgentRef, message: DynMessage) -> Self {
@@ -47,7 +48,7 @@ impl Notify {
         global: &Global,
         root: Root,
     ) -> Result<(Self, impl Future<Output = ()> + Send + Sync + 'static), Error> {
-        let agent_ref = AgentRef::<NotifyHelper>::from_parts_unchecked(root, Uuid::new_v4());
+        let agent_ref = AgentRef::<NotifyHelper>::from_parts_unchecked(root, id::new());
 
         let fut = global
             .db()
