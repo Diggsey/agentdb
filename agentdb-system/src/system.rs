@@ -13,11 +13,7 @@ use crate::{DynAgentRef, DynMessage, Message};
 pub(crate) async fn system_fn_fallible(
     mut input: StateFnInput<'_>,
 ) -> Result<StateFnOutput, Error> {
-    let mut maybe_agent_state = if let Some(state) = &input.state {
-        Some(DefaultSerializer.deserialize::<DynAgent>(state)?)
-    } else {
-        None
-    };
+    let mut maybe_agent_state = input.state.take().map(DynAgent);
 
     let messages = std::mem::take(&mut input.messages);
     let mut context = Context::new(&input);
@@ -52,11 +48,7 @@ pub(crate) async fn system_fn_fallible(
     let commit_hooks = context.commit_hooks;
 
     Ok(StateFnOutput {
-        state: if let Some(agent_state) = maybe_agent_state {
-            Some(DefaultSerializer.serialize(&agent_state)?)
-        } else {
-            None
-        },
+        state: maybe_agent_state.map(|a| a.0),
         messages: context.messages,
         commit_hook: Box::new(|hook_ctx| {
             for commit_hook in commit_hooks {

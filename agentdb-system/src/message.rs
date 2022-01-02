@@ -11,7 +11,7 @@ use crate::handler::Handler;
 use crate::serializer::{DefaultSerializer, Serializer};
 
 /// A message of any type.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DynMessage(pub(crate) Vec<u8>);
 
 impl DynMessage {
@@ -47,11 +47,12 @@ where
     Handler<M>: inventory::Collect,
     Constructor<M>: inventory::Collect,
 {
-    if let Some(mut agent_state) = maybe_agent_state.take() {
+    if let Some(agent_state) = maybe_agent_state.take() {
+        let mut agent_state = agent_state.deserialize()?;
         if Handler::call(&mut *agent_state, agent_ref, message, context).await? {
             agent_state._internal_destruct(agent_ref, context).await?;
         } else {
-            *maybe_agent_state = Some(agent_state);
+            *maybe_agent_state = Some(agent_state.into());
         }
     } else {
         *maybe_agent_state = Constructor::call(message, agent_ref, context).await?;
@@ -65,14 +66,15 @@ pub(crate) async fn deliver_unknown_message(
     maybe_agent_state: &mut Option<DynAgent>,
     context: &mut Context<'_>,
 ) -> Result<(), Error> {
-    if let Some(mut agent_state) = maybe_agent_state.take() {
+    if let Some(agent_state) = maybe_agent_state.take() {
+        let mut agent_state = agent_state.deserialize()?;
         if agent_state
             ._internal_handle_dyn(agent_ref, message, context)
             .await?
         {
             agent_state._internal_destruct(agent_ref, context).await?;
         } else {
-            *maybe_agent_state = Some(agent_state);
+            *maybe_agent_state = Some(agent_state.into());
         }
     }
     Ok(())

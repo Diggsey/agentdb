@@ -11,7 +11,6 @@ use uuid::Uuid;
 
 use crate::agent::{Agent, DynAgent};
 use crate::root::Root;
-use crate::serializer::{DefaultSerializer, Serializer};
 
 /// A handle to an agent whose type is unknown.
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
@@ -51,11 +50,7 @@ impl DynAgentRef {
         snapshot: bool,
     ) -> Result<Option<DynAgent>, Error> {
         let maybe_blob = blob::load(tx, global, self.root.name(), self.id, snapshot).await?;
-        Ok(if let Some(state) = maybe_blob {
-            Some(DefaultSerializer.deserialize::<DynAgent>(&state)?)
-        } else {
-            None
-        })
+        Ok(maybe_blob.map(DynAgent))
     }
     /// Directly load this agent's state from the database.
     pub async fn load(self, global: &Global) -> Result<Option<DynAgent>, Error> {
@@ -81,13 +76,8 @@ impl DynAgentRef {
         self,
         global: Arc<Global>,
     ) -> impl Stream<Item = Result<Option<DynAgent>, Error>> + 'static {
-        blob::watch_stream(global, self.root.name(), self.id).and_then(|maybe_blob| async move {
-            Ok(if let Some(state) = maybe_blob {
-                Some(DefaultSerializer.deserialize::<DynAgent>(&state)?)
-            } else {
-                None
-            })
-        })
+        blob::watch_stream(global, self.root.name(), self.id)
+            .map_ok(|maybe_blob| maybe_blob.map(DynAgent))
     }
 }
 

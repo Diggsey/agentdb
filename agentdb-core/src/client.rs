@@ -74,6 +74,26 @@ impl ClientState {
             state_fn,
         }
     }
+    async fn shutdown(&mut self) -> Result<(), Error> {
+        // Clear our timestamp to relinquish our partitions
+        // immediately.
+        let client_key = self.root.clients.pack(&self.id);
+        self.global
+            .db()
+            .transact_boxed(
+                client_key,
+                |tx, client_key| {
+                    async move {
+                        tx.clear(client_key);
+                        Ok::<_, FdbError>(())
+                    }
+                    .boxed()
+                },
+                TransactOption::idempotent(),
+            )
+            .await?;
+        Ok(())
+    }
     async fn tick(&mut self) -> Result<(), Error> {
         log::info!("Client tick");
 
@@ -241,5 +261,9 @@ pub async fn client_task(
             _ = gc_interval.tick().fuse() => client_state.gc().await?,
         }
     }
+
+    log::info!("Stopping client...");
+    client_state.shutdown().await?;
+
     Ok(())
 }

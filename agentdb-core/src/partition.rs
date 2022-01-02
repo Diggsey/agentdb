@@ -52,6 +52,7 @@ struct RetryAtState {
 }
 
 pub(crate) fn mark_partition_modified(tx: &Transaction, partition: &PartitionSpace) {
+    log::info!("Modified partition {}", partition.partition);
     tx.atomic_op(
         &partition.modified,
         &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],

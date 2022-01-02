@@ -1,15 +1,59 @@
 use agentdb_core::Error;
 use async_trait::async_trait;
 use downcast_rs::{impl_downcast, DowncastSync};
+use serde::{Deserialize, Serialize};
 
 use crate::agent_ref::DynAgentRef;
 use crate::context::Context;
 use crate::destructor::Destructor;
 use crate::dynamic_handler::HandlerDyn;
 use crate::message::DynMessage;
+use crate::serializer::{DefaultSerializer, Serializer};
 
 /// An agent of any type.
-pub type DynAgent = Box<dyn Agent>;
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DynAgent(pub(crate) Vec<u8>);
+
+impl DynAgent {
+    /// Attempt to downcast this message to a concrete type
+    pub fn downcast<A: Agent>(self) -> Result<Box<A>, Self> {
+        if let Ok(a) = DefaultSerializer.deserialize::<Box<dyn Agent>>(&self.0) {
+            if let Ok(a) = a.downcast() {
+                return Ok(a);
+            }
+        }
+        Err(self)
+    }
+    pub(crate) fn deserialize(&self) -> Result<Box<dyn Agent>, Error> {
+        DefaultSerializer.deserialize::<Box<dyn Agent>>(&self.0)
+    }
+}
+
+impl<A: Agent> From<A> for DynAgent {
+    fn from(a: A) -> Self {
+        Self(
+            DefaultSerializer
+                .serialize(&a as &dyn Agent)
+                .expect("Infallible serialization"),
+        )
+    }
+}
+
+impl From<&dyn Agent> for DynAgent {
+    fn from(a: &dyn Agent) -> Self {
+        Self(
+            DefaultSerializer
+                .serialize(a)
+                .expect("Infallible serialization"),
+        )
+    }
+}
+
+impl From<Box<dyn Agent>> for DynAgent {
+    fn from(a: Box<dyn Agent>) -> Self {
+        (*a).into()
+    }
+}
 
 #[doc(hidden)]
 pub async fn destruct_agent<A: Agent>(

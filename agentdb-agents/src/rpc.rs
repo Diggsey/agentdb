@@ -1,13 +1,16 @@
-use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    sync::Arc,
+};
 
 use agentdb_system::*;
 use anyhow::anyhow;
-use futures::{Future, FutureExt, StreamExt, TryStreamExt};
+use futures::{Future, FutureExt, StreamExt, TryFutureExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Header used by messages intended to elicit a response.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct RpcRequest {
     /// The agent to whom the response should be sent.
     pub caller: Option<DynAgentRef>,
@@ -16,7 +19,7 @@ pub struct RpcRequest {
 }
 
 /// Header used by messages intended to respond to an RPC.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct RpcResponse {
     /// The ID of the corresponding request.
     pub id: Uuid,
@@ -61,7 +64,7 @@ impl RpcRequest {
     }
 
     /// Construct a new instance which will resolve a future when a response is received.
-    pub async fn future(
+    pub async fn future_dyn(
         global: Arc<Global>,
         root: Root,
         timeout: Timestamp,
@@ -90,25 +93,103 @@ impl RpcRequest {
 
         Ok((Self::new(agent_ref), fut))
     }
+    /// Construct a new instance which will resolve a future when a response of a specific type is received.
+    pub async fn future<M: Message>(
+        global: Arc<Global>,
+        root: Root,
+        timeout: Timestamp,
+    ) -> Result<
+        (
+            Self,
+            impl Future<Output = Result<M, Error>> + Send + 'static,
+        ),
+        Error,
+    > {
+        let (rpc, fut) = Self::future_dyn(global, root, timeout).await?;
+        Ok((
+            rpc,
+            fut.and_then(|m| async move {
+                Ok(*m
+                    .downcast()
+                    .map_err(|_| Error(anyhow!("Downcast failed: unexpected message type")))?)
+            }),
+        ))
+    }
+}
+
+impl RpcResponse {
+    /// Attempt to complete the provided `RpcCompletable` using this RPC response.
+    pub fn complete<T: RpcCompletable>(&self, value: &mut T) -> T::Output {
+        value.complete_rpc(self.id)
+    }
+}
+
+/// Implemented for various types that might be used to track an in-flight RPC
+/// request.
+pub trait RpcCompletable {
+    /// The result of trying to complete the RPC with a specific response ID.
+    type Output;
+    /// Attempt to complete this RPC with a specific response ID.
+    fn complete_rpc(&mut self, id: Uuid) -> Self::Output;
+}
+
+impl RpcCompletable for Option<Uuid> {
+    type Output = bool;
+    fn complete_rpc(&mut self, id: Uuid) -> bool {
+        if *self == Some(id) {
+            *self = None;
+            true
+        } else {
+            false
+        }
+    }
+}
+
+impl RpcCompletable for BTreeSet<Uuid> {
+    type Output = bool;
+    fn complete_rpc(&mut self, id: Uuid) -> bool {
+        self.remove(&id)
+    }
+}
+
+impl RpcCompletable for HashSet<Uuid> {
+    type Output = bool;
+    fn complete_rpc(&mut self, id: Uuid) -> bool {
+        self.remove(&id)
+    }
+}
+
+impl<V> RpcCompletable for BTreeMap<Uuid, V> {
+    type Output = Option<V>;
+    fn complete_rpc(&mut self, id: Uuid) -> Option<V> {
+        self.remove(&id)
+    }
+}
+
+impl<V> RpcCompletable for HashMap<Uuid, V> {
+    type Output = Option<V>;
+    fn complete_rpc(&mut self, id: Uuid) -> Option<V> {
+        self.remove(&id)
+    }
 }
 
 // Helper agent used to create a `Notify` that will resolve a future
 #[agent(name = "adb.rpc_helper")]
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct RpcHelper {
     response: Option<DynMessage>,
 }
 
 // Message to create a `NotifyHelper`
 #[message(name = "adb.rpc_helper.create")]
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct RpcHelperCreate {
     timeout: Timestamp,
 }
 
 // Message to destroy a `NotifyHelper`
 #[message(name = "adb.rpc_helper.destroy")]
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct RpcHelperDestroy;
 
 #[constructor]

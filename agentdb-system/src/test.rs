@@ -76,9 +76,7 @@ impl TestOutput {
     /// Returns the final state of the agent. Panics if the agent
     /// terminated.
     pub fn final_dyn_state(&self) -> DynAgent {
-        DefaultSerializer
-            .deserialize(self.output.state.as_deref().expect("Agent terminated"))
-            .expect("Failed to deserialize agent state")
+        DynAgent(self.output.state.clone().expect("Agent terminated"))
     }
 
     /// Returns the final state of the agent. Panics if the agent

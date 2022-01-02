@@ -47,7 +47,7 @@ impl<M: Construct> DynConstruct for M {
             context.require_clearance().await?;
         }
         let maybe_agent = self.construct(ref_.unchecked_downcast(), context).await?;
-        Ok(maybe_agent.map(|agent| Box::new(agent) as _))
+        Ok(maybe_agent.map(Into::into))
     }
 }
 

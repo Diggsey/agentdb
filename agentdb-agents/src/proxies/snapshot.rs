@@ -5,12 +5,12 @@ use std::collections::VecDeque;
 use agentdb_system::*;
 use serde::{Deserialize, Serialize};
 
-use crate::Notify;
+use crate::{RpcRequest, RpcResponse};
 
 #[derive(Serialize, Deserialize)]
-enum MessageOrNotify {
+enum QueueItem {
     Message(DynMessage),
-    Notify(Notify),
+    Request(RpcRequest),
 }
 
 /// Proxy agent which will present consistent snapshot of another agent
@@ -19,7 +19,7 @@ enum MessageOrNotify {
 pub struct Snapshot {
     inner_ref: DynAgentRef,
     current_snapshot: Option<DynAgent>,
-    queue: VecDeque<MessageOrNotify>,
+    queue: VecDeque<QueueItem>,
     is_ready: bool,
 }
 
@@ -33,7 +33,7 @@ impl Snapshot {
     pub fn current<T: Agent + Sized>(self) -> Result<Option<T>, DynAgent> {
         Ok(self
             .dyn_current()
-            .map(<dyn Agent>::downcast)
+            .map(DynAgent::downcast)
             .transpose()?
             .map(|agent| *agent))
     }
@@ -55,12 +55,30 @@ pub struct RegisterSnapshot {
     pub snapshot: AgentRef<Snapshot>,
 }
 
-/// Message sent to the snapshot agent to request notification of applied changes
-#[message(name = "adb.proxies.snapshot.request_notify")]
+/// RPC sent to the snapshot agent to both deliver a message, and get
+/// back the updated state.
+#[message(name = "adb.proxies.snapshot.request")]
 #[derive(Serialize, Deserialize)]
-pub struct RequestNotifySnapshot {
-    /// Notify object
-    pub notify: Notify,
+pub struct SnapshotRequest {
+    /// RPC request header
+    pub rpc: RpcRequest,
+}
+
+/// RPC response with the new agent state.
+#[message(name = "adb.proxies.snapshot.response")]
+#[derive(Serialize, Deserialize)]
+pub struct SnapshotResponse {
+    /// RPC response header
+    pub rpc: RpcResponse,
+    /// Agent state
+    pub state: Option<DynAgent>,
+}
+
+impl SnapshotResponse {
+    /// Downcast the snapshot state assuming a particular agent type.
+    pub fn downcast_state<A: Agent>(self) -> Result<Option<A>, DynAgent> {
+        self.state.map(|a| Ok(*a.downcast()?)).transpose()
+    }
 }
 
 /// Message sent from the inner agent to indicate that it's in a consistent state
@@ -100,12 +118,19 @@ impl Handle<SnapshotReady> for Snapshot {
 
         loop {
             match self.queue.pop_front() {
-                Some(MessageOrNotify::Message(msg)) => {
+                Some(QueueItem::Message(msg)) => {
                     context.dyn_send(self.inner_ref, msg)?;
                     break;
                 }
-                Some(MessageOrNotify::Notify(mut notify)) => {
-                    notify.notify(context)?;
+                Some(QueueItem::Request(rpc)) => {
+                    rpc.respond(
+                        |rpc| SnapshotResponse {
+                            rpc,
+                            state: self.current_snapshot.clone(),
+                        },
+                        context,
+                    )?;
+                    break;
                 }
                 None => {
                     self.is_ready = true;
@@ -119,20 +144,25 @@ impl Handle<SnapshotReady> for Snapshot {
 }
 
 #[handler]
-impl Handle<RequestNotifySnapshot> for Snapshot {
+impl Handle<SnapshotRequest> for Snapshot {
     async fn handle(
         &mut self,
         _ref_: AgentRef<Self>,
-        mut message: RequestNotifySnapshot,
+        message: SnapshotRequest,
         context: &mut Context,
     ) -> Result<bool, Error> {
         self.current_snapshot = self.inner_ref.load(context.global()).await?;
 
         if self.is_ready {
-            message.notify.notify(context)?;
+            message.rpc.respond(
+                |rpc| SnapshotResponse {
+                    rpc,
+                    state: self.current_snapshot.clone(),
+                },
+                context,
+            )?;
         } else {
-            self.queue
-                .push_back(MessageOrNotify::Notify(message.notify));
+            self.queue.push_back(QueueItem::Request(message.rpc));
         }
 
         Ok(false)
@@ -140,7 +170,7 @@ impl Handle<RequestNotifySnapshot> for Snapshot {
 }
 
 #[constructor]
-impl Construct for RequestNotifySnapshot {
+impl Construct for SnapshotRequest {
     type Agent = Snapshot;
 
     async fn construct(
@@ -148,7 +178,8 @@ impl Construct for RequestNotifySnapshot {
         _ref_: AgentRef<Snapshot>,
         context: &mut Context,
     ) -> Result<Option<Self::Agent>, Error> {
-        self.notify.notify(context)?;
+        self.rpc
+            .respond(|rpc| SnapshotResponse { rpc, state: None }, context)?;
         Ok(None)
     }
 }
@@ -165,7 +196,7 @@ impl HandleDyn for Snapshot {
             context.dyn_send(self.inner_ref, msg)?;
             self.is_ready = false;
         } else {
-            self.queue.push_back(MessageOrNotify::Message(msg));
+            self.queue.push_back(QueueItem::Message(msg));
         }
 
         Ok(false)

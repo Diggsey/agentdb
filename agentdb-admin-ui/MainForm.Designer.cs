@@ -112,6 +112,7 @@ namespace AgentdbAdmin
             // autoRefreshBox
             // 
             this.autoRefreshBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.autoRefreshBox.Font = new System.Drawing.Font("Segoe UI", 9F);
             this.autoRefreshBox.Items.AddRange(new object[] {
             "Never",
             "1 second",
